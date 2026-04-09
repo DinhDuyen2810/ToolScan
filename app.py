@@ -4,7 +4,6 @@ import html as html_lib
 import json
 import os
 import re
-import shlex
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
@@ -23,7 +22,6 @@ try:
     from pysnmp.hlapi import (
         CommunityData,
         ContextData,
-        Integer,
         ObjectIdentity,
         ObjectType,
         SnmpEngine,
@@ -32,7 +30,7 @@ try:
         nextCmd,
     )
 except Exception:
-    CommunityData = ContextData = Integer = ObjectIdentity = ObjectType = SnmpEngine = UdpTransportTarget = None
+    CommunityData = ContextData = ObjectIdentity = ObjectType = SnmpEngine = UdpTransportTarget = None
     getCmd = nextCmd = None
 
 try:
@@ -53,11 +51,11 @@ WEB_DATABASE_PATH = DATA_DIR / 'websites.json'
 SOLUTION_DATABASE_PATH = DATA_DIR / 'solutions.json'
 
 DEFAULT_SERVERS = [
-    {'ip': '163.223.58.4', 'username': 'root', 'password': 't0ikonho@123'},
-    {'ip': '163.223.58.5', 'username': 'root', 'password': 't0ikonho@123'},
-    {'ip': '163.223.58.12', 'username': 'root', 'password': 'v2labadmin@123'},
-    {'ip': '163.223.58.13', 'username': 'root', 'password': 'v2labadmin@123'},
-    {'ip': '163.223.58.14', 'username': 'root', 'password': 'v2labadmin@123'},
+    {'ip': '163.223.58.4', 'username': 'root', 'password': 't0ikonho@123', 'snmp_community': 'public'},
+    {'ip': '163.223.58.5', 'username': 'root', 'password': 't0ikonho@123', 'snmp_community': 'public'},
+    {'ip': '163.223.58.12', 'username': 'root', 'password': 'v2labadmin@123', 'snmp_community': 'public'},
+    {'ip': '163.223.58.13', 'username': 'root', 'password': 'v2labadmin@123', 'snmp_community': 'public'},
+    {'ip': '163.223.58.14', 'username': 'root', 'password': 'v2labadmin@123', 'snmp_community': 'public'},
 ]
 
 DEFAULT_WEBSITES = [
@@ -69,69 +67,179 @@ DEFAULT_WEBSITES = [
 ]
 
 DEFAULT_SOLUTIONS = [
-    {'name': 'SIEM', 'endpoint': '163.223.58.132', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True, 'snmp_enabled': True, 'snmp_community': 'v2secure', 'snmp_port': 161},
-    {'name': 'WAF01', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.130', 'username': 'admin', 'password': 'admin', 'checkservice': True},
-    {'name': 'WAF02', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.131', 'username': 'admin', 'password': 'admin', 'checkservice': True},
-    {'name': 'EDR', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.133', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NAC', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.134', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NIPS_MCNB', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.135', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NIPS_CSDL', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.136', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NIPS_Tools', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.137', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NIPS_LAN', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.138', 'username': 'admin', 'password': 'admin', 'checkservice': True},
-    {'name': 'NIPS_DMZ', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.139', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NIPS_V2Cloud', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.144', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'NIPS_MGT', 'snmp_enabled': True, 'snmp_community': 'public', 'snmp_port': 161, 'endpoint': '163.223.58.146', 'username': 'admin', 'password': 'V2SocAdmin@828682', 'checkservice': True},
-    {'name': 'PAM', 'endpoint': '163.223.58.143', 'username': 'TTS_SOC_DNDuyen', 'password': 'DNDuyenSOC@2026$#', 'checkservice': False, 'snmp_enabled': False, 'snmp_community': 'public', 'snmp_port': 161},
-    {'name': 'NOC', 'endpoint': 'http://163.223.58.140/cacti/', 'username': 'admin', 'password': 'V2labadmin@123', 'checkservice': False, 'snmp_enabled': False, 'snmp_community': 'public', 'snmp_port': 161},
+    {
+        'name': 'SIEM',
+        'endpoint': '163.223.58.132',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'v2secure',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'WAF01',
+        'endpoint': '163.223.58.130',
+        'username': 'admin',
+        'password': 'admin',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'WAF02',
+        'endpoint': '163.223.58.131',
+        'username': 'admin',
+        'password': 'admin',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'EDR',
+        'endpoint': '163.223.58.133',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NAC',
+        'endpoint': '163.223.58.134',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_MCNB',
+        'endpoint': '163.223.58.135',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_CSDL',
+        'endpoint': '163.223.58.136',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_Tools',
+        'endpoint': '163.223.58.137',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_LAN',
+        'endpoint': '163.223.58.138',
+        'username': 'admin',
+        'password': 'admin',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_DMZ',
+        'endpoint': '163.223.58.139',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_V2Cloud',
+        'endpoint': '163.223.58.144',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NIPS_MGT',
+        'endpoint': '163.223.58.146',
+        'username': 'admin',
+        'password': 'V2SocAdmin@828682',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'PAM',
+        'endpoint': '163.223.58.143',
+        'username': 'TTS_SOC_DNDuyen',
+        'password': 'DNDuyenSOC@2026$#',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': False,
+        'snmp_enabled': False,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
+    {
+        'name': 'NOC',
+        'endpoint': 'http://163.223.58.140/cacti/',
+        'username': 'admin',
+        'password': 'V2labadmin@123',
+        'ssh_username': '',
+        'ssh_password': '',
+        'checkservice': False,
+        'snmp_enabled': False,
+        'snmp_community': 'public',
+        'snmp_port': 161,
+    },
 ]
 
-REMOTE_SCRIPT = r"""read cpu user nice system idle iowait irq softirq steal guest < /proc/stat
-user1=$user
-total1=$((user + nice + system + idle + iowait + irq + softirq + steal))
-
-sleep 1
-
-read cpu user nice system idle iowait irq softirq steal guest < /proc/stat
-user2=$user
-total2=$((user + nice + system + idle + iowait + irq + softirq + steal))
-
-cpu_usage=$(awk -v user1="$user1" -v user2="$user2" -v total1="$total1" -v total2="$total2" 'BEGIN {
-    diff_total = total2 - total1;
-    diff_user = user2 - user1;
-    if (diff_total <= 0) {
-        printf "0.0";
-    } else {
-        printf "%.1f", (diff_user / diff_total) * 100;
-    }
-}')
-
-ram_usage=$(free | awk '/^Mem:/ {
-    total = $2;
-    available = $7;
-    used = total - available;
-    if (total <= 0) {
-        printf "0.0";
-    } else {
-        printf "%.1f", (used / total) * 100;
-    }
-}')
-
-storage_usage=$(df -P / | awk 'NR==2 {
-    gsub(/%/, "", $5);
-    print $5;
-}')
-
-printf "CPU=%s
-RAM=%s
-STORAGE=%s
-" "$cpu_usage" "$ram_usage" "$storage_usage"
-"""
-
-CPU_RE = re.compile(r'CPU=([0-9]+(?:\.[0-9]+)?)')
-RAM_RE = re.compile(r'RAM=([0-9]+(?:\.[0-9]+)?)')
-STORAGE_RE = re.compile(r'STORAGE=([0-9]+(?:\.[0-9]+)?)')
-PERCENT_VALUE_RE = re.compile(r'([0-9]+(?:\.[0-9]+)?)\s*%')
-ID_BLOCK_RE_TEMPLATE = r'<(?P<tag>[a-zA-Z0-9:_-]+)[^>]*\bid=["\']{element_id}["\'][^>]*>(?P<content>.*?)</(?P=tag)>'
+CPU_RE = re.compile(r'CPU=([-]?[0-9]+(?:[.,][0-9]+)?)')
+RAM_RE = re.compile(r'RAM=([-]?[0-9]+(?:[.,][0-9]+)?)')
+STORAGE_RE = re.compile(r'STORAGE=([-]?[0-9]+(?:[.,][0-9]+)?)')
 PASSWORD_INPUT_RE = re.compile(r'<input[^>]+type=["\']?password', re.IGNORECASE)
 USERNAME_HINTS = ('user', 'username', 'login', 'email', 'mail', 'account', 'uid')
 PASSWORD_HINTS = ('pass', 'password', 'passwd', 'pwd')
@@ -143,6 +251,10 @@ DEFAULT_HEADERS = {
         'Chrome/128.0 Safari/537.36'
     )
 }
+
+
+def parse_float_loose(value: str) -> float:
+    return float(str(value).strip().replace(',', '.'))
 
 
 def ensure_databases() -> None:
@@ -164,6 +276,7 @@ def normalize_server(raw: dict[str, Any]) -> dict[str, str]:
         'ip': str(raw.get('ip', '')).strip(),
         'username': str(raw.get('username', '')).strip(),
         'password': str(raw.get('password', '')).strip(),
+        'snmp_community': str(raw.get('snmp_community', raw.get('community', 'public'))).strip(),
     }
 
 
@@ -172,8 +285,8 @@ def validate_servers(servers: list[dict[str, Any]]) -> list[dict[str, str]]:
     if len(cleaned) != 5:
         raise ValueError('Database SSH phải có đúng 5 dòng máy.')
     for index, server in enumerate(cleaned, start=1):
-        if not (server['ip'] and server['username'] and server['password']):
-            raise ValueError(f'Dòng SSH {index} đang thiếu IP, username hoặc password.')
+        if not (server['ip'] and server['username'] and server['password'] and server['snmp_community']):
+            raise ValueError(f'Dòng SSH {index} đang thiếu IP, username, password hoặc SNMP CommunityString.')
     return cleaned
 
 
@@ -205,6 +318,8 @@ def normalize_solution(raw: dict[str, Any]) -> dict[str, Any]:
         'endpoint': str(endpoint).strip(),
         'username': str(raw.get('username', '')).strip(),
         'password': str(raw.get('password', '')).strip(),
+        'ssh_username': str(raw.get('ssh_username', raw.get('ssh_user', ''))).strip(),
+        'ssh_password': str(raw.get('ssh_password', raw.get('ssh_pass', ''))).strip(),
         'checkservice': to_bool(raw.get('checkservice', False)),
         'snmp_enabled': to_bool(raw.get('snmp_enabled', raw.get('use_snmp', True))),
         'snmp_port': int(str(raw.get('snmp_port', raw.get('port', 161)) or '161')),
@@ -220,8 +335,17 @@ def validate_solutions(solutions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not cleaned:
         raise ValueError('Database giải pháp phải có ít nhất 1 dòng.')
     for index, solution in enumerate(cleaned, start=1):
-        if not (solution['name'] and solution['endpoint'] and solution['username'] and solution['password']):
-            raise ValueError(f'Dòng giải pháp {index} đang thiếu tên, endpoint, username hoặc password.')
+        if not (
+            solution['name']
+            and solution['endpoint']
+            and solution['username']
+            and solution['password']
+            and solution['snmp_community']
+        ):
+            raise ValueError(
+                f'Dòng giải pháp {index} đang thiếu tên, endpoint, '
+                f'username/password giao diện hoặc SNMP CommunityString.'
+            )
     return cleaned
 
 
@@ -406,7 +530,7 @@ def run_parallel_checks(
             index = future_map[future]
             try:
                 _, result = future.result()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 item = items[index]
                 result = {
                     'name': item.get('name') or item.get('ip') or item.get('domain') or f'item-{index + 1}',
@@ -419,10 +543,175 @@ def run_parallel_checks(
     return [item for item in results if item is not None]
 
 
-def check_one_server(index: int, server: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+def log_server_metric_source(ip: str, source: str, message: str, metrics: dict[str, float] | None = None) -> None:
+    metric_text = ''
+    if metrics:
+        metric_text = ' | ' + ', '.join(
+            f'{key.upper()}={value:.1f}%'
+            for key, value in metrics.items()
+        )
+    print(f'[SERVER_SCAN] {ip} | {source} | {message}{metric_text}', flush=True)
+
+
+def log_solution_metric_source(name: str, source: str, message: str, metrics: dict[str, str] | None = None) -> None:
+    metric_text = ''
+    if metrics:
+        metric_text = ' | ' + ', '.join(f'{k}={v}' for k, v in metrics.items())
+    print(f'[SOLUTION_SCAN] {name} | {source} | {message}{metric_text}', flush=True)
+
+
+def parse_snmp_numeric(value: Any) -> float:
+    if value is None:
+        raise ValueError('SNMP value is None')
+    raw = str(value).strip().replace(',', '.')
+    match = re.search(r'-?\d+(?:\.\d+)?', raw)
+    if not match:
+        raise ValueError(f'Không parse được giá trị SNMP: {raw}')
+    return float(match.group(0))
+
+
+def snmp_supported() -> bool:
+    return all(item is not None for item in (
+        SnmpEngine, CommunityData, ContextData, ObjectIdentity, ObjectType, UdpTransportTarget, getCmd, nextCmd
+    ))
+
+
+def snmp_get_values(host: str, community: str, port: int, timeout: int, retries: int, oid_list: list[str]) -> dict[str, Any]:
+    if not snmp_supported():
+        return {}
+    iterator = getCmd(
+        SnmpEngine(),
+        CommunityData(community, mpModel=1),
+        UdpTransportTarget((host, int(port)), timeout=float(timeout), retries=int(retries)),
+        ContextData(),
+        *[ObjectType(ObjectIdentity(oid)) for oid in oid_list],
+    )
+    error_indication, error_status, error_index, var_binds = next(iterator)
+    if error_indication or error_status:
+        return {}
+    values: dict[str, Any] = {}
+    for var_bind in var_binds:
+        values[str(var_bind[0])] = var_bind[1]
+    return values
+
+
+def snmp_walk_values(host: str, community: str, port: int, timeout: int, retries: int, base_oid: str) -> list[tuple[str, Any]]:
+    if not snmp_supported():
+        return []
+    results: list[tuple[str, Any]] = []
+    for error_indication, error_status, error_index, var_binds in nextCmd(
+        SnmpEngine(),
+        CommunityData(community, mpModel=1),
+        UdpTransportTarget((host, int(port)), timeout=float(timeout), retries=int(retries)),
+        ContextData(),
+        ObjectType(ObjectIdentity(base_oid)),
+        lexicographicMode=False,
+    ):
+        if error_indication or error_status:
+            return []
+        for var_bind in var_binds:
+            results.append((str(var_bind[0]), var_bind[1]))
+    return results
+
+
+def fetch_server_metrics_snmp(server: dict[str, Any]) -> dict[str, float]:
+    ip = server['ip']
+    community = server['snmp_community']
+
+    if not snmp_supported():
+        raise RuntimeError('pysnmp chưa được cài hoặc không khả dụng.')
+
+    oid_values = snmp_get_values(
+        host=ip,
+        community=community,
+        port=161,
+        timeout=2,
+        retries=0,
+        oid_list=[
+            '1.3.6.1.4.1.2021.11.11.0',
+            '1.3.6.1.4.1.2021.4.5.0',
+            '1.3.6.1.4.1.2021.4.6.0',
+            '1.3.6.1.4.1.2021.4.15.0',
+            '1.3.6.1.4.1.2021.4.14.0',
+            '1.3.6.1.2.1.25.2.3.1.5.41',
+            '1.3.6.1.2.1.25.2.3.1.6.41',
+        ],
+    )
+
+    required_oids = [
+        '1.3.6.1.4.1.2021.11.11.0',
+        '1.3.6.1.4.1.2021.4.5.0',
+        '1.3.6.1.4.1.2021.4.6.0',
+        '1.3.6.1.4.1.2021.4.15.0',
+        '1.3.6.1.4.1.2021.4.14.0',
+        '1.3.6.1.2.1.25.2.3.1.5.41',
+        '1.3.6.1.2.1.25.2.3.1.6.41',
+    ]
+    missing = [oid for oid in required_oids if oid not in oid_values]
+    if missing:
+        raise RuntimeError(f'SNMP thiếu OID: {", ".join(missing)}')
+
+    cpu_idle = parse_snmp_numeric(oid_values['1.3.6.1.4.1.2021.11.11.0'])
+    mem_total_real = parse_snmp_numeric(oid_values['1.3.6.1.4.1.2021.4.5.0'])
+    mem_avail_real = parse_snmp_numeric(oid_values['1.3.6.1.4.1.2021.4.6.0'])
+    mem_cached = parse_snmp_numeric(oid_values['1.3.6.1.4.1.2021.4.15.0'])
+    mem_buffer = parse_snmp_numeric(oid_values['1.3.6.1.4.1.2021.4.14.0'])
+    storage_size = parse_snmp_numeric(oid_values['1.3.6.1.2.1.25.2.3.1.5.41'])
+    storage_used = parse_snmp_numeric(oid_values['1.3.6.1.2.1.25.2.3.1.6.41'])
+
+    if mem_total_real <= 0:
+        raise RuntimeError('memTotalReal <= 0')
+    if storage_size <= 0:
+        raise RuntimeError('hrStorageSize <= 0')
+
+    cpu_percent = max(0.0, min(100.0, 100.0 - cpu_idle))
+    ram_used = mem_total_real - mem_avail_real - mem_cached - mem_buffer
+    ram_percent = max(0.0, min(100.0, (ram_used / mem_total_real) * 100.0))
+    storage_percent = max(0.0, min(100.0, (storage_used / storage_size) * 100.0))
+
+    return {
+        'cpu': cpu_percent,
+        'ram': ram_percent,
+        'storage': storage_percent,
+    }
+
+
+def parse_ssh_metrics(output: str) -> dict[str, float]:
+    cpu_match = CPU_RE.search(output)
+    ram_match = RAM_RE.search(output)
+    storage_match = STORAGE_RE.search(output)
+
+    if not (cpu_match and ram_match and storage_match):
+        raise RuntimeError(f'Không parse được output SSH: {output.strip()}')
+
+    cpu_value = parse_float_loose(cpu_match.group(1))
+    ram_value = parse_float_loose(ram_match.group(1))
+    storage_value = parse_float_loose(storage_match.group(1))
+
+    if cpu_value < 0 or cpu_value > 100:
+        raise RuntimeError(f'CPU parse bất thường: {cpu_value} từ output: {output.strip()}')
+    if ram_value < 0 or ram_value > 100:
+        raise RuntimeError(f'RAM parse bất thường: {ram_value} từ output: {output.strip()}')
+    if storage_value < 0 or storage_value > 100:
+        raise RuntimeError(f'Storage parse bất thường: {storage_value} từ output: {output.strip()}')
+
+    return {
+        'cpu': cpu_value,
+        'ram': ram_value,
+        'storage': storage_value,
+    }
+
+
+def fetch_server_metrics_ssh(server: dict[str, Any]) -> dict[str, float]:
     ip = server['ip']
     username = server['username']
     password = server['password']
+
+    command = r"""sh -lc '
+LC_ALL=C top -bn1 | grep -m1 "%Cpu\|Cpu(s)" ;
+LC_ALL=C top -bn1 | grep -m1 "MiB Mem\|KiB Mem\|GiB Mem" ;
+df -P / | awk "NR==2 {print \$5}"
+'"""
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -439,7 +728,6 @@ def check_one_server(index: int, server: dict[str, Any]) -> tuple[int, dict[str,
             look_for_keys=False,
             allow_agent=False,
         )
-        command = f"sh -lc {shlex.quote(REMOTE_SCRIPT)}"
         stdin, stdout, stderr = client.exec_command(command, timeout=20)
         _ = stdin
 
@@ -447,47 +735,197 @@ def check_one_server(index: int, server: dict[str, Any]) -> tuple[int, dict[str,
         stderr_text = stderr.read().decode('utf-8', errors='ignore')
         exit_code = stdout.channel.recv_exit_status()
 
-        metrics = parse_metrics(stdout_text)
-        if exit_code != 0 and not metrics:
-            raise RuntimeError(stderr_text.strip() or 'Lệnh kiểm tra tài nguyên trả về lỗi.')
-        if not metrics:
-            raise RuntimeError('Không đọc được CPU, RAM hoặc Storage từ máy đích.')
+        if exit_code != 0 and not stdout_text.strip():
+            raise RuntimeError(stderr_text.strip() or 'Lệnh SSH lấy metrics trả về lỗi.')
 
-        return index, {
-            'ip': ip,
-            'username': username,
-            'cpu_percent': f"{metrics['cpu']:.1f}%",
-            'ram_percent': f"{metrics['ram']:.1f}%",
-            'storage_percent': f"{metrics['storage']:.1f}%",
-            'status': 'SSH thành công',
-            'is_success': True,
-            'error': '',
+        lines = [line.strip() for line in stdout_text.splitlines() if line.strip()]
+        if len(lines) < 3:
+            raise RuntimeError(f'Output SSH không đủ dữ liệu: {stdout_text.strip()}')
+
+        cpu_line = lines[0]
+        mem_line = lines[1]
+        storage_line = lines[2]
+
+        cpu_idle_match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s*id', cpu_line, re.IGNORECASE)
+        if not cpu_idle_match:
+            raise RuntimeError(f'Không tìm được CPU idle từ top: {cpu_line}')
+        cpu_idle = parse_float_loose(cpu_idle_match.group(1))
+        cpu_value = max(0.0, min(100.0, 100.0 - cpu_idle))
+
+        mem_numbers = re.findall(r'([0-9]+(?:[.,][0-9]+)?)', mem_line)
+        if len(mem_numbers) < 3:
+            raise RuntimeError(f'Không parse được dòng RAM từ top: {mem_line}')
+
+        mem_total = parse_float_loose(mem_numbers[0])
+
+        used_match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s+used', mem_line, re.IGNORECASE)
+        if used_match:
+            mem_used = parse_float_loose(used_match.group(1))
+        else:
+            mem_used = parse_float_loose(mem_numbers[2])
+
+        if mem_total <= 0:
+            raise RuntimeError(f'Tổng RAM không hợp lệ: {mem_total}')
+        ram_value = max(0.0, min(100.0, (mem_used / mem_total) * 100.0))
+
+        storage_match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s*%', storage_line)
+        if storage_match:
+            storage_value = parse_float_loose(storage_match.group(1))
+        else:
+            storage_value = parse_float_loose(storage_line.replace('%', '').strip())
+        storage_value = max(0.0, min(100.0, storage_value))
+
+        metrics = {
+            'cpu': cpu_value,
+            'ram': ram_value,
+            'storage': storage_value,
         }
-    except Exception as exc:  # noqa: BLE001
-        return index, {
-            'ip': ip,
-            'username': username,
-            'cpu_percent': 'N/A',
-            'ram_percent': 'N/A',
-            'storage_percent': 'N/A',
-            'status': 'Không SSH được',
-            'is_success': False,
-            'error': str(exc),
-        }
+
+        log_server_metric_source(ip, 'SSH_RAW', f'CPU_LINE={cpu_line} | MEM_LINE={mem_line} | STORAGE_LINE={storage_line}')
+        return metrics
     finally:
         client.close()
 
 
-def parse_metrics(output: str) -> dict[str, float]:
-    cpu_match = CPU_RE.search(output)
-    ram_match = RAM_RE.search(output)
-    storage_match = STORAGE_RE.search(output)
-    if not (cpu_match and ram_match and storage_match):
-        return {}
-    return {
-        'cpu': float(cpu_match.group(1)),
-        'ram': float(ram_match.group(1)),
-        'storage': float(storage_match.group(1)),
+def fetch_solution_metrics_ssh_priority(solution: dict[str, Any]) -> tuple[dict[str, str], str]:
+    host = parse_solution_host(solution.get('endpoint', ''))
+    if not host:
+        return {}, 'invalid endpoint'
+
+    ssh_username = solution.get('ssh_username', '')
+    ssh_password = solution.get('ssh_password', '')
+    if not ssh_username or not ssh_password:
+        return {}, 'missing ssh credentials'
+
+    command = r"""sh -lc '
+LC_ALL=C top -bn1 | grep -m1 "%Cpu\|Cpu(s)" ;
+LC_ALL=C top -bn1 | grep -m1 "MiB Mem\|KiB Mem\|GiB Mem" ;
+df -P / | awk "NR==2 {print \$5}"
+'"""
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        client.connect(
+            hostname=host,
+            port=22,
+            username=ssh_username,
+            password=ssh_password,
+            timeout=8,
+            auth_timeout=8,
+            banner_timeout=8,
+            look_for_keys=False,
+            allow_agent=False,
+        )
+
+        stdin, stdout, stderr = client.exec_command(command, timeout=20)
+        _ = stdin
+
+        stdout_text = stdout.read().decode('utf-8', errors='ignore')
+        stderr_text = stderr.read().decode('utf-8', errors='ignore')
+        exit_code = stdout.channel.recv_exit_status()
+
+        if exit_code != 0 and not stdout_text.strip():
+            return {}, stderr_text.strip() or 'ssh metrics command failed'
+
+        lines = [line.strip() for line in stdout_text.splitlines() if line.strip()]
+        if len(lines) < 3:
+            return {}, f'not enough ssh output: {stdout_text.strip()}'
+
+        cpu_line, mem_line, storage_line = lines[0], lines[1], lines[2]
+
+        cpu_idle_match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s*id', cpu_line, re.IGNORECASE)
+        if not cpu_idle_match:
+            return {}, f'cannot parse cpu line: {cpu_line}'
+        cpu_idle = parse_float_loose(cpu_idle_match.group(1))
+        cpu_percent = max(0.0, min(100.0, 100.0 - cpu_idle))
+
+        mem_numbers = re.findall(r'([0-9]+(?:[.,][0-9]+)?)', mem_line)
+        if len(mem_numbers) < 3:
+            return {}, f'cannot parse mem line: {mem_line}'
+
+        mem_total = parse_float_loose(mem_numbers[0])
+
+        used_match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s+used', mem_line, re.IGNORECASE)
+        if used_match:
+            mem_used = parse_float_loose(used_match.group(1))
+        else:
+            mem_used = parse_float_loose(mem_numbers[2])
+
+        if mem_total <= 0:
+            return {}, 'mem total <= 0'
+        ram_percent = max(0.0, min(100.0, (mem_used / mem_total) * 100.0))
+
+        storage_match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s*%', storage_line)
+        storage_percent = parse_float_loose((storage_match.group(1) if storage_match else storage_line).replace('%', '').strip())
+        storage_percent = max(0.0, min(100.0, storage_percent))
+
+        metrics = {
+            'cpu_percent': f'{cpu_percent:.1f}%',
+            'ram_percent': f'{ram_percent:.1f}%',
+            'storage_percent': f'{storage_percent:.1f}%',
+        }
+        return metrics, f'SSH metrics from {host}'
+    except Exception as exc:
+        return {}, str(exc)
+    finally:
+        client.close()
+
+
+def check_one_server(index: int, server: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    ip = server['ip']
+    username = server['username']
+
+    snmp_error = ''
+    ssh_error = ''
+
+    try:
+        snmp_metrics = fetch_server_metrics_snmp(server)
+        log_server_metric_source(ip, 'SNMP', 'Lấy dữ liệu thành công', snmp_metrics)
+        return index, {
+            'ip': ip,
+            'username': username,
+            'metric_source': 'SNMP',
+            'cpu_percent': f"{snmp_metrics['cpu']:.1f}%",
+            'ram_percent': f"{snmp_metrics['ram']:.1f}%",
+            'storage_percent': f"{snmp_metrics['storage']:.1f}%",
+            'status': 'Lấy bằng SNMP thành công',
+            'is_success': True,
+            'error': '',
+        }
+    except Exception as exc:
+        snmp_error = str(exc)
+        log_server_metric_source(ip, 'SNMP', f'Lỗi: {snmp_error}')
+
+    try:
+        ssh_metrics = fetch_server_metrics_ssh(server)
+        log_server_metric_source(ip, 'SSH', 'Fallback thành công', ssh_metrics)
+        return index, {
+            'ip': ip,
+            'username': username,
+            'metric_source': 'SSH',
+            'cpu_percent': f"{ssh_metrics['cpu']:.1f}%",
+            'ram_percent': f"{ssh_metrics['ram']:.1f}%",
+            'storage_percent': f"{ssh_metrics['storage']:.1f}%",
+            'status': 'SNMP lỗi, fallback SSH thành công',
+            'is_success': True,
+            'error': f'SNMP lỗi: {snmp_error}',
+        }
+    except Exception as exc:
+        ssh_error = str(exc)
+        log_server_metric_source(ip, 'SSH', f'Fallback lỗi: {ssh_error}')
+
+    return index, {
+        'ip': ip,
+        'username': username,
+        'metric_source': 'NONE',
+        'cpu_percent': 'N/A',
+        'ram_percent': 'N/A',
+        'storage_percent': 'N/A',
+        'status': 'SNMP và SSH đều lỗi',
+        'is_success': False,
+        'error': f'SNMP lỗi: {snmp_error}; SSH lỗi: {ssh_error}',
     }
 
 
@@ -546,48 +984,6 @@ def parse_solution_host(endpoint: str) -> str:
     return cleaned
 
 
-def snmp_supported() -> bool:
-    return all(item is not None for item in (SnmpEngine, CommunityData, ContextData, ObjectIdentity, ObjectType, UdpTransportTarget, getCmd, nextCmd))
-
-
-def snmp_get_values(host: str, community: str, port: int, timeout: int, retries: int, oid_list: list[str]) -> dict[str, Any]:
-    if not snmp_supported():
-        return {}
-    iterator = getCmd(
-        SnmpEngine(),
-        CommunityData(community, mpModel=1),
-        UdpTransportTarget((host, int(port)), timeout=float(timeout), retries=int(retries)),
-        ContextData(),
-        *[ObjectType(ObjectIdentity(oid)) for oid in oid_list],
-    )
-    error_indication, error_status, error_index, var_binds = next(iterator)
-    if error_indication or error_status:
-        return {}
-    values: dict[str, Any] = {}
-    for var_bind in var_binds:
-        values[str(var_bind[0])] = var_bind[1]
-    return values
-
-
-def snmp_walk_values(host: str, community: str, port: int, timeout: int, retries: int, base_oid: str) -> list[tuple[str, Any]]:
-    if not snmp_supported():
-        return []
-    results: list[tuple[str, Any]] = []
-    for error_indication, error_status, error_index, var_binds in nextCmd(
-        SnmpEngine(),
-        CommunityData(community, mpModel=1),
-        UdpTransportTarget((host, int(port)), timeout=float(timeout), retries=int(retries)),
-        ContextData(),
-        ObjectType(ObjectIdentity(base_oid)),
-        lexicographicMode=False,
-    ):
-        if error_indication or error_status:
-            return []
-        for var_bind in var_binds:
-            results.append((str(var_bind[0]), var_bind[1]))
-    return results
-
-
 def format_percent(value: float | int | None) -> str:
     if value is None:
         return 'N/A'
@@ -598,10 +994,11 @@ def format_percent(value: float | int | None) -> str:
 
 
 def fetch_solution_metrics_snmp(solution: dict[str, Any]) -> tuple[dict[str, str], str]:
-    if not solution.get('snmp_enabled'):
+    if not solution.get('snmp_enabled', True):
         return {}, 'SNMP disabled'
     if not snmp_supported():
         return {}, 'pysnmp not installed'
+
     host = parse_solution_host(solution.get('endpoint', ''))
     if not host:
         return {}, 'invalid endpoint'
@@ -613,18 +1010,19 @@ def fetch_solution_metrics_snmp(solution: dict[str, Any]) -> tuple[dict[str, str
 
     metrics = {'cpu_percent': 'N/A', 'ram_percent': 'N/A', 'storage_percent': 'N/A'}
 
-    cpu_rows = snmp_walk_values(host, community, port, timeout, retries, '1.3.6.1.2.1.25.3.3.1.2')
-    cpu_vals: list[float] = []
-    for _, val in cpu_rows:
-        try:
-            cpu_vals.append(float(int(val)))
-        except Exception:
-            try:
-                cpu_vals.append(float(str(val)))
-            except Exception:
-                pass
-    if cpu_vals:
-        metrics['cpu_percent'] = format_percent(sum(cpu_vals) / len(cpu_vals))
+    cpu_idle_values = snmp_get_values(
+        host,
+        community,
+        port,
+        timeout,
+        retries,
+        ['1.3.6.1.4.1.2021.11.11.0'],
+    )
+    try:
+        cpu_idle = parse_snmp_numeric(cpu_idle_values['1.3.6.1.4.1.2021.11.11.0'])
+        metrics['cpu_percent'] = format_percent(100.0 - cpu_idle)
+    except Exception:
+        pass
 
     mem_values = snmp_get_values(
         host,
@@ -632,58 +1030,42 @@ def fetch_solution_metrics_snmp(solution: dict[str, Any]) -> tuple[dict[str, str
         port,
         timeout,
         retries,
-        ['1.3.6.1.4.1.2021.4.5.0', '1.3.6.1.4.1.2021.4.6.0'],
+        [
+            '1.3.6.1.4.1.2021.4.5.0',
+            '1.3.6.1.4.1.2021.4.6.0',
+            '1.3.6.1.4.1.2021.4.15.0',
+            '1.3.6.1.4.1.2021.4.14.0',
+        ],
     )
     try:
-        total_real = float(int(mem_values['1.3.6.1.4.1.2021.4.5.0']))
-        avail_real = float(int(mem_values['1.3.6.1.4.1.2021.4.6.0']))
-        used_real = max(total_real - avail_real, 0.0)
-        if total_real > 0:
-            metrics['ram_percent'] = format_percent((used_real / total_real) * 100.0)
+        mem_total_real = parse_snmp_numeric(mem_values['1.3.6.1.4.1.2021.4.5.0'])
+        mem_avail_real = parse_snmp_numeric(mem_values['1.3.6.1.4.1.2021.4.6.0'])
+        mem_cached = parse_snmp_numeric(mem_values['1.3.6.1.4.1.2021.4.15.0'])
+        mem_buffer = parse_snmp_numeric(mem_values['1.3.6.1.4.1.2021.4.14.0'])
+        ram_used = mem_total_real - mem_avail_real - mem_cached - mem_buffer
+        if mem_total_real > 0:
+            metrics['ram_percent'] = format_percent((ram_used / mem_total_real) * 100.0)
     except Exception:
         pass
 
-    descr_rows = snmp_walk_values(host, community, port, timeout, retries, '1.3.6.1.2.1.25.2.3.1.3')
-    alloc_rows = dict(snmp_walk_values(host, community, port, timeout, retries, '1.3.6.1.2.1.25.2.3.1.4'))
-    size_rows = dict(snmp_walk_values(host, community, port, timeout, retries, '1.3.6.1.2.1.25.2.3.1.5'))
-    used_rows = dict(snmp_walk_values(host, community, port, timeout, retries, '1.3.6.1.2.1.25.2.3.1.6'))
-
-    selected_index = None
-    for oid, val in descr_rows:
-        descr = str(val).strip().lower()
-        idx = oid.rsplit('.', 1)[-1]
-        if descr in ('/', '/root', 'rootfs') or descr.endswith(' /'):
-            selected_index = idx
-            break
-    if selected_index is None and descr_rows:
-        for oid, val in descr_rows:
-            descr = str(val).strip().lower()
-            idx = oid.rsplit('.', 1)[-1]
-            if 'root' in descr or '/' in descr:
-                selected_index = idx
-                break
-    if selected_index is not None:
-        try:
-            alloc = float(int(alloc_rows[f'1.3.6.1.2.1.25.2.3.1.4.{selected_index}']))
-            size = float(int(size_rows[f'1.3.6.1.2.1.25.2.3.1.5.{selected_index}']))
-            used = float(int(used_rows[f'1.3.6.1.2.1.25.2.3.1.6.{selected_index}']))
-            total_units = size * alloc
-            used_units = used * alloc
-            if total_units > 0:
-                metrics['storage_percent'] = format_percent((used_units / total_units) * 100.0)
-        except Exception:
-            pass
-
-    if metrics['storage_percent'] == 'N/A':
-        dsk_rows = snmp_walk_values(host, community, port, timeout, retries, '1.3.6.1.4.1.2021.9.1.9')
-        dsk_vals: list[float] = []
-        for _, val in dsk_rows:
-            try:
-                dsk_vals.append(float(int(val)))
-            except Exception:
-                pass
-        if dsk_vals:
-            metrics['storage_percent'] = format_percent(max(dsk_vals))
+    storage_values = snmp_get_values(
+        host,
+        community,
+        port,
+        timeout,
+        retries,
+        [
+            '1.3.6.1.2.1.25.2.3.1.5.41',
+            '1.3.6.1.2.1.25.2.3.1.6.41',
+        ],
+    )
+    try:
+        storage_size = parse_snmp_numeric(storage_values['1.3.6.1.2.1.25.2.3.1.5.41'])
+        storage_used = parse_snmp_numeric(storage_values['1.3.6.1.2.1.25.2.3.1.6.41'])
+        if storage_size > 0:
+            metrics['storage_percent'] = format_percent((storage_used / storage_size) * 100.0)
+    except Exception:
+        pass
 
     if all(metrics[k] == 'N/A' for k in metrics):
         return {}, f'SNMP no metrics from {host}:{port}'
@@ -698,8 +1080,84 @@ def check_one_solution(index: int, solution: dict[str, Any]) -> tuple[int, dict[
     password = cleaned['password']
     checkservice = cleaned['checkservice']
 
+    snmp_metrics, snmp_note = fetch_solution_metrics_snmp(cleaned)
+    if snmp_metrics:
+        log_solution_metric_source(name, 'SNMP', snmp_note, snmp_metrics)
+
+        candidate_urls = build_solution_urls(endpoint)
+        web_result = None
+        for url in candidate_urls:
+            web_result = attempt_solution_login(name, endpoint, username, password, url, checkservice, cleaned)
+            if web_result.get('is_success') or web_result.get('is_running'):
+                break
+
+        if web_result is None:
+            web_result = {
+                'name': name,
+                'endpoint': endpoint,
+                'username': username,
+                'checked_url': endpoint,
+                'http_status': 'N/A',
+                'login_status': 'Chưa kiểm tra',
+                'running_status': 'Đang chạy',
+                'status': 'Đang chạy',
+                'note': snmp_note,
+                'is_success': False,
+                'is_running': True,
+                'checkservice': checkservice,
+                'service_summary': 'Không kiểm tra',
+                'services': [],
+                'service_running_count': 0,
+                'service_total_count': 0,
+            }
+
+        web_result.update(snmp_metrics)
+        web_result['metric_source'] = 'SNMP'
+        web_result['note'] = f"{web_result.get('note', '')} | {snmp_note}".strip(' |')
+        return index, web_result
+
+    log_solution_metric_source(name, 'SNMP', snmp_note or 'SNMP failed')
+
+    ssh_metrics, ssh_note = fetch_solution_metrics_ssh_priority(cleaned)
+    if ssh_metrics:
+        log_solution_metric_source(name, 'SSH', ssh_note, ssh_metrics)
+
+        candidate_urls = build_solution_urls(endpoint)
+        web_result = None
+        for url in candidate_urls:
+            web_result = attempt_solution_login(name, endpoint, username, password, url, checkservice, cleaned)
+            if web_result.get('is_success') or web_result.get('is_running'):
+                break
+
+        if web_result is None:
+            web_result = {
+                'name': name,
+                'endpoint': endpoint,
+                'username': username,
+                'checked_url': endpoint,
+                'http_status': 'N/A',
+                'login_status': 'Chưa kiểm tra',
+                'running_status': 'Đang chạy',
+                'status': 'Đang chạy',
+                'note': ssh_note,
+                'is_success': False,
+                'is_running': True,
+                'checkservice': checkservice,
+                'service_summary': 'Không kiểm tra',
+                'services': [],
+                'service_running_count': 0,
+                'service_total_count': 0,
+            }
+
+        web_result.update(ssh_metrics)
+        web_result['metric_source'] = 'SSH'
+        web_result['note'] = f"{web_result.get('note', '')} | {ssh_note}".strip(' |')
+        return index, web_result
+
+    log_solution_metric_source(name, 'SSH', ssh_note or 'SSH failed')
+
     candidate_urls = build_solution_urls(endpoint)
-    best_result: dict[str, Any] | None = None
+    best_result = None
 
     for url in candidate_urls:
         result = attempt_solution_login(name, endpoint, username, password, url, checkservice, cleaned)
@@ -718,7 +1176,7 @@ def check_one_solution(index: int, solution: dict[str, Any]) -> tuple[int, dict[
             'login_status': 'Không truy cập được',
             'running_status': 'Không chạy',
             'status': 'Không truy cập được',
-            'note': 'Không tạo được URL kiểm tra.',
+            'note': f'SNMP failed: {snmp_note}; SSH failed: {ssh_note}; web failed',
             'is_success': False,
             'is_running': False,
             'checkservice': checkservice,
@@ -731,6 +1189,18 @@ def check_one_solution(index: int, solution: dict[str, Any]) -> tuple[int, dict[
             'storage_percent': 'N/A',
         }
 
+    best_result['metric_source'] = 'WEB'
+    best_result['note'] = f"SNMP failed: {snmp_note}; SSH failed: {ssh_note}; {best_result.get('note', '')}".strip('; ')
+    log_solution_metric_source(
+        name,
+        'WEB',
+        best_result.get('note', 'web metrics/login result'),
+        {
+            'cpu_percent': best_result.get('cpu_percent', 'N/A'),
+            'ram_percent': best_result.get('ram_percent', 'N/A'),
+            'storage_percent': best_result.get('storage_percent', 'N/A'),
+        },
+    )
     return index, best_result
 
 
@@ -769,15 +1239,8 @@ def build_session() -> Session:
 def score_metric_html(html: str) -> int:
     if not html:
         return 0
-
     score = 0
-    for marker in (
-        'cpuUsageText',
-        'memoryUsageText',
-        'ramUsageText',
-        'diskUsageText',
-        'storageUsageText',
-    ):
+    for marker in ('cpuUsageText', 'memoryUsageText', 'ramUsageText', 'diskUsageText', 'storageUsageText'):
         if marker in html:
             score += 1
     return score
@@ -972,13 +1435,12 @@ def fetch_rendered_solution_metrics(
             cookie_payloads = []
             for cookie in session.cookies:
                 for base_url in cookie_urls:
-                    payload = {
+                    cookie_payloads.append({
                         'name': cookie.name,
                         'value': cookie.value,
                         'url': base_url,
                         'path': cookie.path or '/',
-                    }
-                    cookie_payloads.append(payload)
+                    })
             if cookie_payloads:
                 context.add_cookies(cookie_payloads)
 
@@ -1124,7 +1586,6 @@ def attempt_solution_login(
                 failure_note='Trang yêu cầu xác thực HTTP nhưng tài khoản chưa đăng nhập được.',
                 checkservice=checkservice,
                 session=session,
-                solution=solution,
             )
 
     if 'html' in content_type:
@@ -1167,7 +1628,6 @@ def attempt_solution_login(
                 failure_note='Đăng nhập form chưa thành công hoặc hệ thống dùng xác thực đặc biệt.',
                 checkservice=checkservice,
                 session=session,
-                solution=solution,
             )
 
         if initial_status < 400:
@@ -1241,7 +1701,6 @@ def finalize_solution_result(
     failure_note: str,
     checkservice: bool,
     session: Session | None = None,
-    solution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     status_text = format_status(response)
     final_url = response.url or fallback_url
@@ -1297,13 +1756,6 @@ def finalize_solution_result(
             if score_metric_values(rendered_metrics) > score_metric_values(static_metrics) and rendered_html:
                 best_html = rendered_html
 
-        snmp_metrics, snmp_note = fetch_solution_metrics_snmp(solution or {'endpoint': endpoint})
-        if snmp_metrics:
-            metrics.update(merge_metric_maps(metrics, snmp_metrics))
-            success_note = f"{success_note} {snmp_note}".strip()
-        elif solution and solution.get('snmp_enabled'):
-            success_note = f"{success_note} SNMP unavailable.".strip()
-
         if checkservice:
             services = extract_services(best_html)
             if not services:
@@ -1320,12 +1772,6 @@ def finalize_solution_result(
     display_running_status = service_summary if service_total_count else 'Đang chạy'
     metrics['service_running_count'] = service_running_count
     metrics['service_total_count'] = service_total_count
-
-    if not login_success and solution and solution.get('snmp_enabled'):
-        snmp_metrics, snmp_note = fetch_solution_metrics_snmp(solution)
-        if snmp_metrics:
-            metrics.update(merge_metric_maps(metrics, snmp_metrics))
-            failure_note = f"{failure_note} {snmp_note}".strip()
 
     if login_success:
         return {
@@ -1423,7 +1869,6 @@ def extract_percent_from_exact_id_block(html: str, element_id: str) -> str:
         return 'N/A'
 
     escaped_id = re.escape(element_id)
-
     patterns = [
         re.compile(
             rf"<(?P<tag>[a-zA-Z0-9:_-]+)[^>]*\bid=[\"']{escaped_id}[\"'][^>]*>(?P<content>.*?)</(?P=tag)>",
@@ -1491,10 +1936,11 @@ def normalize_percent_text(raw_text: str) -> str:
     if not text:
         return 'N/A'
 
-    match = re.search(r'([0-9]+(?:\.[0-9]+)?)\s*%', text)
+    match = re.search(r'([0-9]+(?:[.,][0-9]+)?)\s*%', text)
     if not match:
         return 'N/A'
-    return f"{float(match.group(1)):.1f}%"
+    return f"{parse_float_loose(match.group(1)):.1f}%"
+
 
 def extract_services(html: str) -> list[dict[str, str]]:
     soup = BeautifulSoup(html or '', 'html.parser')

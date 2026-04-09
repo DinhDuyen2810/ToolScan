@@ -63,29 +63,56 @@
 <div class="container">
   <div class="card">
     <h1>Tool kiểm tra SSH, Website và Giải pháp</h1>
-    <p class="page-subtitle"><strong>Mục I</strong> quét SSH. <strong>Mục II</strong> quét website. <strong>Mục III</strong> đăng nhập giải pháp, kiểm tra trạng thái chạy và có thể bung chi tiết service nếu bật CheckService.</p>
+    <p class="page-subtitle"><strong>Mục I</strong> quét SSH/SNMP. <strong>Mục II</strong> quét website. <strong>Mục III</strong> quét giải pháp theo thứ tự SNMP → SSH → Giao diện, và có thể bung chi tiết service nếu bật CheckService.</p>
   </div>
 
   <div class="card">
-    <div class="section-title"><span class="pill">MỤC I</span><h2>Quét SSH server</h2></div>
-    <p class="subtitle">Bấm <strong>Bắt đầu quét SSH</strong> để SSH vào 5 máy trong database và lấy %CPU, %RAM, %Storage đã dùng. Máy nào không SSH được thì các thông số sẽ hiện <strong>N/A</strong>.</p>
+    <div class="section-title"><span class="pill">MỤC I</span><h2>Quét server bằng SNMP trước, SSH fallback sau</h2></div>
+    <p class="subtitle">Bấm <strong>Bắt đầu quét SSH</strong> để tool thử lấy %CPU, %RAM, %Storage bằng <strong>SNMP</strong> trước. Nếu SNMP lỗi hoặc thiếu dữ liệu thì tool sẽ tự chuyển qua <strong>SSH</strong>. Cột kết quả sẽ hiển thị nguồn lấy dữ liệu.</p>
     <div class="toolbar"><button class="btn-primary" id="sshScanBtn" type="button">Bắt đầu quét SSH</button><button class="btn-secondary" id="sshToggleDbBtn" type="button">Xem database SSH</button></div>
     <div class="muted">Database SSH đang ẩn. Chỉ hiện ra khi bấm Xem database SSH.</div>
     <div class="message" id="sshMessageBox"></div>
     <div class="summary" id="sshSummaryBox">
       <div class="stat"><div class="label">Tổng số máy</div><div class="value" id="sshTotalCount">0</div></div>
-      <div class="stat"><div class="label">SSH thành công</div><div class="value" id="sshSuccessCount">0</div></div>
-      <div class="stat"><div class="label">SSH không thành công</div><div class="value" id="sshFailedCount">0</div></div>
+      <div class="stat"><div class="label">Lấy thành công</div><div class="value" id="sshSuccessCount">0</div></div>
+      <div class="stat"><div class="label">Không lấy được</div><div class="value" id="sshFailedCount">0</div></div>
     </div>
   </div>
   <div class="card hidden" id="sshDatabaseCard">
     <div class="section-header"><h3>Database SSH</h3><button class="btn-secondary" id="sshHideDbBtn" type="button">Ẩn database SSH</button></div>
-    <div style="overflow-x:auto;"><table><thead><tr><th>IP</th><th>Username</th><th>Password</th></tr></thead><tbody id="sshDatabaseBody"><tr><td colspan="3" class="empty">Đang tải database SSH...</td></tr></tbody></table></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>Username</th>
+            <th>Password</th>
+            <th>SNMP CommunityString</th>
+          </tr>
+        </thead>
+        <tbody id="sshDatabaseBody"><tr><td colspan="4" class="empty">Đang tải database SSH...</td></tr></tbody>
+      </table>
+    </div>
     <div class="toolbar" style="margin-bottom:0;"><button class="btn-success" id="sshSaveDbBtn" type="button">Lưu database SSH</button></div>
   </div>
   <div class="card">
     <div class="section-header"><h3>Kết quả quét SSH</h3></div>
-    <div style="overflow-x:auto;"><table><thead><tr><th>IP</th><th>Username</th><th>% CPU đã dùng</th><th>% RAM đã dùng</th><th>% Storage đã dùng</th><th>Trạng thái</th></tr></thead><tbody id="sshResultBody"><tr><td colspan="6" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>Nguồn</th>
+            <th>Username</th>
+            <th>% CPU đã dùng</th>
+            <th>% RAM đã dùng</th>
+            <th>% Storage đã dùng</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody id="sshResultBody"><tr><td colspan="7" class="empty">Chưa có dữ liệu.</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="spacer"></div>
@@ -116,7 +143,7 @@
 
   <div class="card">
     <div class="section-title"><span class="pill">MỤC III</span><h2>Quét giải pháp và service</h2></div>
-    <p class="subtitle">Nếu bật <strong>CheckService</strong> trong database, sau khi đăng nhập thành công tool sẽ tìm tất cả service trong <span class="mono">div.engine-card</span>, lấy tên trong <span class="mono">div.engine-title</span> và trạng thái trong <span class="mono">div.status-badge</span>.</p>
+    <p class="subtitle">Tool sẽ thử lấy CPU, RAM, Storage theo thứ tự <strong>SNMP → SSH → Giao diện</strong>. Nếu bật <strong>CheckService</strong>, sau khi truy cập được giao diện tool sẽ tìm tất cả service trong <span class="mono">div.engine-card</span>, lấy tên trong <span class="mono">div.engine-title</span> và trạng thái trong <span class="mono">div.status-badge</span>.</p>
     <div class="toolbar"><button class="btn-primary" id="solutionScanBtn" type="button">Bắt đầu quét giải pháp</button><button class="btn-secondary" id="solutionToggleDbBtn" type="button">Xem database giải pháp</button></div>
     <div class="muted">Database giải pháp đang ẩn. Chỉ hiện ra khi bấm Xem database giải pháp.</div>
     <div class="message" id="solutionMessageBox"></div>
@@ -130,12 +157,44 @@
   </div>
   <div class="card hidden" id="solutionDatabaseCard">
     <div class="section-header"><h3>Database giải pháp</h3><button class="btn-secondary" id="solutionHideDbBtn" type="button">Ẩn database giải pháp</button></div>
-    <div style="overflow-x:auto;"><table><thead><tr><th>Tên giải pháp</th><th>Endpoint / URL</th><th>Username</th><th>Password</th><th>CheckService</th></tr></thead><tbody id="solutionDatabaseBody"><tr><td colspan="5" class="empty">Đang tải database giải pháp...</td></tr></tbody></table></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Tên giải pháp</th>
+            <th>Endpoint / URL</th>
+            <th>User giao diện</th>
+            <th>Pass giao diện</th>
+            <th>User SSH</th>
+            <th>Pass SSH</th>
+            <th>SNMP CommunityString</th>
+            <th>CheckService</th>
+          </tr>
+        </thead>
+        <tbody id="solutionDatabaseBody"><tr><td colspan="8" class="empty">Đang tải database giải pháp...</td></tr></tbody>
+      </table>
+    </div>
     <div class="toolbar" style="margin-bottom:0;"><button class="btn-success" id="solutionSaveDbBtn" type="button">Lưu database giải pháp</button></div>
   </div>
   <div class="card">
     <div class="section-header"><h3>Kết quả quét giải pháp</h3></div>
-    <div style="overflow-x:auto;"><table><thead><tr><th>Giải pháp</th><th>Endpoint / URL</th><th>Đăng nhập</th><th>Trạng thái chạy</th><th>CPU</th><th>RAM</th><th>Storage</th></tr></thead><tbody id="solutionResultBody"><tr><td colspan="7" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Giải pháp</th>
+            <th>Endpoint / URL</th>
+            <th>Đăng nhập</th>
+            <th>Trạng thái chạy</th>
+            <th>Nguồn metrics</th>
+            <th>CPU</th>
+            <th>RAM</th>
+            <th>Storage</th>
+          </tr>
+        </thead>
+        <tbody id="solutionResultBody"><tr><td colspan="8" class="empty">Chưa có dữ liệu.</td></tr></tbody>
+      </table>
+    </div>
   </div>
 </div>
 <script>
@@ -147,31 +206,315 @@ function clearMessage(box){ box.className = 'message'; box.textContent = ''; }
 function renderThreeStatSummary(group, summary){ group.summaryBox.style.display = 'grid'; group.totalCount.textContent = summary.total || 0; group.successCount.textContent = summary.success || 0; group.failedCount.textContent = summary.failed || 0; }
 function renderSolutionSummary(summary){ solution.summaryBox.style.display = 'grid'; solution.totalCount.textContent = summary.total || 0; solution.runningCount.textContent = summary.running || 0; solution.loginSuccessCount.textContent = summary.login_success || 0; solution.issueCount.textContent = summary.issues || 0; solution.serviceRunningCount.textContent = `${summary.running_services || 0}/${summary.total_services || 0}`; }
 async function setDatabaseVisible(group, visible, loader, showText, hideText){ if(visible){ await loader(); group.databaseCard.classList.remove('hidden'); group.toggleDbBtn.textContent = hideText; } else { group.databaseCard.classList.add('hidden'); group.toggleDbBtn.textContent = showText; } }
+
 const ssh = {messageBox:sshMessageBox,summaryBox:sshSummaryBox,totalCount:sshTotalCount,successCount:sshSuccessCount,failedCount:sshFailedCount,databaseCard:sshDatabaseCard,databaseBody:sshDatabaseBody,resultBody:sshResultBody,toggleDbBtn:sshToggleDbBtn,hideDbBtn:sshHideDbBtn,saveDbBtn:sshSaveDbBtn,scanBtn:sshScanBtn};
 const web = {messageBox:webMessageBox,summaryBox:webSummaryBox,totalCount:webTotalCount,successCount:webSuccessCount,failedCount:webFailedCount,databaseCard:webDatabaseCard,databaseBody:webDatabaseBody,resultBody:webResultBody,toggleDbBtn:webToggleDbBtn,hideDbBtn:webHideDbBtn,saveDbBtn:webSaveDbBtn,scanBtn:webScanBtn};
 const solution = {messageBox:solutionMessageBox,summaryBox:solutionSummaryBox,totalCount:solutionTotalCount,runningCount:solutionRunningCount,loginSuccessCount:solutionLoginSuccessCount,issueCount:solutionIssueCount,serviceRunningCount:solutionServiceRunningCount,databaseCard:solutionDatabaseCard,databaseBody:solutionDatabaseBody,resultBody:solutionResultBody,toggleDbBtn:solutionToggleDbBtn,hideDbBtn:solutionHideDbBtn,saveDbBtn:solutionSaveDbBtn,scanBtn:solutionScanBtn};
-function collectRows(body, fields){ const rows=[...body.querySelectorAll('tr')]; const items=[]; const invalidRows=[]; rows.forEach((row,index)=>{ row.classList.remove('invalid'); let invalid=false; const item={}; fields.forEach((field)=>{ const input=row.querySelector(`[data-field="${field}"]`); let value=''; if(input){ value=input.type==='checkbox' ? input.checked : input.value.trim(); } item[field]=value; if(field !== 'checkservice' && !value) invalid=true; }); if(invalid){ row.classList.add('invalid'); invalidRows.push(index+1); } items.push(item); }); return {items, invalidRows}; }
-function renderSshDatabaseRows(items){ ssh.databaseBody.innerHTML = items.map(i=>`<tr><td><input type="text" data-field="ip" value="${esc(i.ip)}"></td><td><input type="text" data-field="username" value="${esc(i.username)}"></td><td><input type="text" data-field="password" value="${esc(i.password)}"></td></tr>`).join(''); }
-function renderWebDatabaseRows(items){ web.databaseBody.innerHTML = items.map(i=>`<tr><td><input type="text" data-field="domain" value="${esc(i.domain)}"></td></tr>`).join(''); }
-function renderSolutionDatabaseRows(items){ solution.databaseBody.innerHTML = items.map(i=>`<tr><td><input type="text" data-field="name" value="${esc(i.name)}"></td><td><input type="text" data-field="endpoint" value="${esc(i.endpoint)}"></td><td><input type="text" data-field="username" value="${esc(i.username)}"></td><td><input type="text" data-field="password" value="${esc(i.password)}"></td><td style="text-align:center;"><input type="checkbox" data-field="checkservice" ${i.checkservice ? 'checked' : ''}></td></tr>`).join(''); }
-function renderSshResults(items){ ssh.resultBody.innerHTML = items.length ? items.map(i=>`<tr><td>${esc(i.ip)}</td><td>${esc(i.username)}</td><td>${esc(i.cpu_percent)}</td><td>${esc(i.ram_percent)}</td><td>${esc(i.storage_percent)}</td><td><span class="badge ${i.is_success?'badge-success':'badge-failed'}">${esc(i.status)}</span></td></tr>`).join('') : '<tr><td colspan="6" class="empty">Chưa có dữ liệu.</td></tr>'; }
-function renderWebResults(items){ web.resultBody.innerHTML = items.length ? items.map(i=>`<tr><td>${esc(i.domain)}</td><td class="mono">${esc(i.checked_url)}</td><td>${esc(i.http_status)}</td><td><span class="badge ${i.is_success?'badge-success':'badge-failed'}">${esc(i.status)}</span></td></tr>`).join('') : '<tr><td colspan="4" class="empty">Chưa có dữ liệu.</td></tr>'; }
-function renderSolutionResults(items){ if(!items.length){ solution.resultBody.innerHTML = '<tr><td colspan="7" class="empty">Chưa có dữ liệu.</td></tr>'; return; } const rows=[]; items.forEach((item, idx)=>{ const canExpand = item.checkservice && Array.isArray(item.services) && item.services.length > 0; const loginTitle = [item.http_status, item.checked_url, item.note].filter(Boolean).join(' | '); const runningTitle = item.service_total_count ? `${item.service_running_count || 0}/${item.service_total_count || 0} service running` : ''; rows.push(`<tr><td><div class="solution-name">${canExpand ? `<button type="button" class="toggle-arrow" data-target="svc-${idx}">▶</button>` : ''}<span>${esc(item.name)}</span></div></td><td class="mono">${esc(item.endpoint)}</td><td><span class="badge ${item.is_success ? 'badge-success' : 'badge-failed'}" title="${esc(loginTitle)}">${esc(item.login_status)}</span></td><td><span class="badge ${item.is_running ? 'badge-info' : 'badge-failed'}" title="${esc(runningTitle)}">${esc(item.running_status)}</span></td><td>${esc(item.cpu_percent || 'N/A')}</td><td>${esc(item.ram_percent || 'N/A')}</td><td>${esc(item.storage_percent || 'N/A')}</td></tr>`); if(canExpand){ rows.push(`<tr class="service-row hidden" id="svc-${idx}"><td colspan="7"><div class="service-wrap">${item.services.map(s=>`<div class="service-item"><div><strong>${esc(s.name)}</strong></div><div><span class="badge ${String(s.status).toLowerCase()==='running' ? 'badge-success' : 'badge-failed'}">${esc(s.status)}</span></div></div>`).join('')}</div></td></tr>`); } }); solution.resultBody.innerHTML = rows.join(''); [...solution.resultBody.querySelectorAll('.toggle-arrow')].forEach(btn => { btn.addEventListener('click', () => { const row = document.getElementById(btn.dataset.target); const open = !row.classList.contains('hidden'); row.classList.toggle('hidden'); btn.classList.toggle('open', !open); btn.textContent = open ? '▶' : '▼'; }); }); }
-async function loadSshDatabase(){ ssh.databaseBody.innerHTML = '<tr><td colspan="3" class="empty">Đang tải database SSH...</td></tr>'; const data = await apiGet('/api/database'); renderSshDatabaseRows(data.servers || []); }
-async function loadWebDatabase(){ web.databaseBody.innerHTML = '<tr><td class="empty">Đang tải database website...</td></tr>'; const data = await apiGet('/api/web-database'); renderWebDatabaseRows(data.websites || []); }
-async function loadSolutionDatabase(){ solution.databaseBody.innerHTML = '<tr><td colspan="5" class="empty">Đang tải database giải pháp...</td></tr>'; const data = await apiGet('/api/solution-database'); renderSolutionDatabaseRows(data.solutions || []); }
-async function saveSshDatabase(){ clearMessage(ssh.messageBox); const {items,invalidRows}=collectRows(ssh.databaseBody,['ip','username','password']); if(invalidRows.length){ showMessage(ssh.messageBox,`Các dòng SSH ${invalidRows.join(', ')} đang thiếu IP, username hoặc password.`,'error'); return; } ssh.saveDbBtn.disabled=true; try { const data=await apiPost('/api/database',{servers:items}); renderSshDatabaseRows(data.servers || []); showMessage(ssh.messageBox, data.message || 'Đã lưu database SSH thành công.','success'); } catch(e){ showMessage(ssh.messageBox,e.message || 'Không lưu được database SSH.','error'); } finally { ssh.saveDbBtn.disabled=false; } }
-async function saveWebDatabase(){ clearMessage(web.messageBox); const {items,invalidRows}=collectRows(web.databaseBody,['domain']); if(invalidRows.length){ showMessage(web.messageBox,`Các dòng website ${invalidRows.join(', ')} đang thiếu domain.`,'error'); return; } web.saveDbBtn.disabled=true; try { const data=await apiPost('/api/web-database',{websites:items}); renderWebDatabaseRows(data.websites || []); showMessage(web.messageBox, data.message || 'Đã lưu database website thành công.','success'); } catch(e){ showMessage(web.messageBox,e.message || 'Không lưu được database website.','error'); } finally { web.saveDbBtn.disabled=false; } }
-async function saveSolutionDatabase(){ clearMessage(solution.messageBox); const {items,invalidRows}=collectRows(solution.databaseBody,['name','endpoint','username','password','checkservice']); if(invalidRows.length){ showMessage(solution.messageBox,`Các dòng giải pháp ${invalidRows.join(', ')} đang thiếu tên, endpoint, username hoặc password.`,'error'); return; } solution.saveDbBtn.disabled=true; try { const data=await apiPost('/api/solution-database',{solutions:items}); renderSolutionDatabaseRows(data.solutions || []); showMessage(solution.messageBox, data.message || 'Đã lưu database giải pháp thành công.','success'); } catch(e){ showMessage(solution.messageBox,e.message || 'Không lưu được database giải pháp.','error'); } finally { solution.saveDbBtn.disabled=false; } }
-async function scanSsh(){ clearMessage(ssh.messageBox); ssh.scanBtn.disabled=true; showMessage(ssh.messageBox,'Đang quét SSH 5 máy trong database...','info'); try { const data=await apiPost('/api/scan'); renderThreeStatSummary(ssh,data.summary||{}); renderSshResults(data.results||[]); showMessage(ssh.messageBox,`Quét SSH xong ${data.summary.total} máy. Thành công: ${data.summary.success}, thất bại: ${data.summary.failed}.`,'success'); } catch(e){ showMessage(ssh.messageBox,e.message || 'Có lỗi xảy ra khi quét SSH.','error'); } finally { ssh.scanBtn.disabled=false; } }
-async function scanWebsites(){ clearMessage(web.messageBox); web.scanBtn.disabled=true; showMessage(web.messageBox,'Đang quét 5 domain trong database website...','info'); try { const data=await apiPost('/api/web-scan'); renderThreeStatSummary(web,data.summary||{}); renderWebResults(data.results||[]); showMessage(web.messageBox,`Quét website xong ${data.summary.total} domain. 200 OK: ${data.summary.success}, còn lại: ${data.summary.failed}.`,'success'); } catch(e){ showMessage(web.messageBox,e.message || 'Có lỗi xảy ra khi quét website.','error'); } finally { web.scanBtn.disabled=false; } }
-async function scanSolutions(){ clearMessage(solution.messageBox); solution.scanBtn.disabled=true; showMessage(solution.messageBox,'Đang quét các giải pháp và service...','info'); try { const data=await apiPost('/api/solution-scan'); renderSolutionSummary(data.summary||{}); renderSolutionResults(data.results||[]); showMessage(solution.messageBox,`Quét giải pháp xong ${data.summary.total} mục. Đang chạy: ${data.summary.running}, đăng nhập thành công: ${data.summary.login_success}, service running: ${data.summary.running_services || 0}/${data.summary.total_services || 0}, cần kiểm tra thêm: ${data.summary.issues}.`,'success'); } catch(e){ showMessage(solution.messageBox,e.message || 'Có lỗi xảy ra khi quét giải pháp.','error'); } finally { solution.scanBtn.disabled=false; } }
-ssh.toggleDbBtn.addEventListener('click', async ()=>{ try { await setDatabaseVisible(ssh, ssh.databaseCard.classList.contains('hidden'), loadSshDatabase, 'Xem database SSH', 'Ẩn database SSH'); } catch(e){ showMessage(ssh.messageBox,e.message || 'Không tải được database SSH.','error'); } });
-ssh.hideDbBtn.addEventListener('click', async ()=> setDatabaseVisible(ssh,false,loadSshDatabase,'Xem database SSH','Ẩn database SSH')); ssh.saveDbBtn.addEventListener('click', saveSshDatabase); ssh.scanBtn.addEventListener('click', scanSsh);
-web.toggleDbBtn.addEventListener('click', async ()=>{ try { await setDatabaseVisible(web, web.databaseCard.classList.contains('hidden'), loadWebDatabase, 'Xem database website', 'Ẩn database website'); } catch(e){ showMessage(web.messageBox,e.message || 'Không tải được database website.','error'); } });
-web.hideDbBtn.addEventListener('click', async ()=> setDatabaseVisible(web,false,loadWebDatabase,'Xem database website','Ẩn database website')); web.saveDbBtn.addEventListener('click', saveWebDatabase); web.scanBtn.addEventListener('click', scanWebsites);
-solution.toggleDbBtn.addEventListener('click', async ()=>{ try { await setDatabaseVisible(solution, solution.databaseCard.classList.contains('hidden'), loadSolutionDatabase, 'Xem database giải pháp', 'Ẩn database giải pháp'); } catch(e){ showMessage(solution.messageBox,e.message || 'Không tải được database giải pháp.','error'); } });
-solution.hideDbBtn.addEventListener('click', async ()=> setDatabaseVisible(solution,false,loadSolutionDatabase,'Xem database giải pháp','Ẩn database giải pháp')); solution.saveDbBtn.addEventListener('click', saveSolutionDatabase); solution.scanBtn.addEventListener('click', scanSolutions);
+
+function collectRows(body, fields){
+  const rows=[...body.querySelectorAll('tr')];
+  const items=[];
+  const invalidRows=[];
+  rows.forEach((row,index)=>{
+    row.classList.remove('invalid');
+    let invalid=false;
+    const item={};
+    fields.forEach((field)=>{
+      const input=row.querySelector(`[data-field="${field}"]`);
+      let value='';
+      if(input){ value=input.type==='checkbox' ? input.checked : input.value.trim(); }
+      item[field]=value;
+      if(field !== 'checkservice' && !value) invalid=true;
+    });
+    if(invalid){
+      row.classList.add('invalid');
+      invalidRows.push(index+1);
+    }
+    items.push(item);
+  });
+  return {items, invalidRows};
+}
+
+function renderSshDatabaseRows(items){
+  ssh.databaseBody.innerHTML = items.map(i=>`
+    <tr>
+      <td><input type="text" data-field="ip" value="${esc(i.ip)}"></td>
+      <td><input type="text" data-field="username" value="${esc(i.username)}"></td>
+      <td><input type="text" data-field="password" value="${esc(i.password)}"></td>
+      <td><input type="text" data-field="snmp_community" value="${esc(i.snmp_community || '')}"></td>
+    </tr>
+  `).join('');
+}
+
+function renderWebDatabaseRows(items){
+  web.databaseBody.innerHTML = items.map(i=>`
+    <tr>
+      <td><input type="text" data-field="domain" value="${esc(i.domain)}"></td>
+    </tr>
+  `).join('');
+}
+
+function renderSolutionDatabaseRows(items){
+  solution.databaseBody.innerHTML = items.map(i=>`
+    <tr>
+      <td><input type="text" data-field="name" value="${esc(i.name)}"></td>
+      <td><input type="text" data-field="endpoint" value="${esc(i.endpoint)}"></td>
+      <td><input type="text" data-field="username" value="${esc(i.username)}"></td>
+      <td><input type="text" data-field="password" value="${esc(i.password)}"></td>
+      <td><input type="text" data-field="ssh_username" value="${esc(i.ssh_username || '')}"></td>
+      <td><input type="text" data-field="ssh_password" value="${esc(i.ssh_password || '')}"></td>
+      <td><input type="text" data-field="snmp_community" value="${esc(i.snmp_community || 'public')}"></td>
+      <td style="text-align:center;"><input type="checkbox" data-field="checkservice" ${i.checkservice ? 'checked' : ''}></td>
+    </tr>
+  `).join('');
+}
+
+function renderSshResults(items){
+  ssh.resultBody.innerHTML = items.length ? items.map(i=>`
+    <tr>
+      <td>${esc(i.ip)}</td>
+      <td><span class="badge ${i.metric_source === 'SNMP' ? 'badge-info' : (i.metric_source === 'SSH' ? 'badge-muted' : 'badge-failed')}">${esc(i.metric_source || 'N/A')}</span></td>
+      <td>${esc(i.username)}</td>
+      <td>${esc(i.cpu_percent)}</td>
+      <td>${esc(i.ram_percent)}</td>
+      <td>${esc(i.storage_percent)}</td>
+      <td><span class="badge ${i.is_success?'badge-success':'badge-failed'}" title="${esc(i.error || '')}">${esc(i.status)}</span></td>
+    </tr>
+  `).join('') : '<tr><td colspan="7" class="empty">Chưa có dữ liệu.</td></tr>';
+}
+
+function renderWebResults(items){
+  web.resultBody.innerHTML = items.length ? items.map(i=>`
+    <tr>
+      <td>${esc(i.domain)}</td>
+      <td class="mono">${esc(i.checked_url)}</td>
+      <td>${esc(i.http_status)}</td>
+      <td><span class="badge ${i.is_success?'badge-success':'badge-failed'}">${esc(i.status)}</span></td>
+    </tr>
+  `).join('') : '<tr><td colspan="4" class="empty">Chưa có dữ liệu.</td></tr>';
+}
+
+function renderSolutionResults(items){
+  if(!items.length){
+    solution.resultBody.innerHTML = '<tr><td colspan="8" class="empty">Chưa có dữ liệu.</td></tr>';
+    return;
+  }
+
+  const rows=[];
+  items.forEach((item, idx)=>{
+    const canExpand = item.checkservice && Array.isArray(item.services) && item.services.length > 0;
+    const loginTitle = [item.http_status, item.checked_url, item.note].filter(Boolean).join(' | ');
+    const runningTitle = item.service_total_count ? `${item.service_running_count || 0}/${item.service_total_count || 0} service running` : '';
+
+    const metricSourceClass =
+      item.metric_source === 'SNMP' ? 'badge-info' :
+      item.metric_source === 'SSH' ? 'badge-muted' :
+      item.metric_source === 'WEB' ? 'badge-success' : 'badge-failed';
+
+    rows.push(`
+      <tr>
+        <td>
+          <div class="solution-name">
+            ${canExpand ? `<button type="button" class="toggle-arrow" data-target="svc-${idx}">▶</button>` : ''}
+            <span>${esc(item.name)}</span>
+          </div>
+        </td>
+        <td class="mono">${esc(item.endpoint)}</td>
+        <td><span class="badge ${item.is_success ? 'badge-success' : 'badge-failed'}" title="${esc(loginTitle)}">${esc(item.login_status)}</span></td>
+        <td><span class="badge ${item.is_running ? 'badge-info' : 'badge-failed'}" title="${esc(runningTitle)}">${esc(item.running_status)}</span></td>
+        <td><span class="badge ${metricSourceClass}">${esc(item.metric_source || 'N/A')}</span></td>
+        <td>${esc(item.cpu_percent || 'N/A')}</td>
+        <td>${esc(item.ram_percent || 'N/A')}</td>
+        <td>${esc(item.storage_percent || 'N/A')}</td>
+      </tr>
+    `);
+
+    if(canExpand){
+      rows.push(`
+        <tr class="service-row hidden" id="svc-${idx}">
+          <td colspan="8">
+            <div class="service-wrap">
+              ${item.services.map(s=>`
+                <div class="service-item">
+                  <div><strong>${esc(s.name)}</strong></div>
+                  <div><span class="badge ${String(s.status).toLowerCase()==='running' ? 'badge-success' : 'badge-failed'}">${esc(s.status)}</span></div>
+                </div>
+              `).join('')}
+            </div>
+          </td>
+        </tr>
+      `);
+    }
+  });
+
+  solution.resultBody.innerHTML = rows.join('');
+
+  [...solution.resultBody.querySelectorAll('.toggle-arrow')].forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = document.getElementById(btn.dataset.target);
+      const open = !row.classList.contains('hidden');
+      row.classList.toggle('hidden');
+      btn.classList.toggle('open', !open);
+      btn.textContent = open ? '▶' : '▼';
+    });
+  });
+}
+
+async function loadSshDatabase(){
+  ssh.databaseBody.innerHTML = '<tr><td colspan="4" class="empty">Đang tải database SSH...</td></tr>';
+  const data = await apiGet('/api/database');
+  renderSshDatabaseRows(data.servers || []);
+}
+
+async function loadWebDatabase(){
+  web.databaseBody.innerHTML = '<tr><td class="empty">Đang tải database website...</td></tr>';
+  const data = await apiGet('/api/web-database');
+  renderWebDatabaseRows(data.websites || []);
+}
+
+async function loadSolutionDatabase(){
+  solution.databaseBody.innerHTML = '<tr><td colspan="8" class="empty">Đang tải database giải pháp...</td></tr>';
+  const data = await apiGet('/api/solution-database');
+  renderSolutionDatabaseRows(data.solutions || []);
+}
+
+async function saveSshDatabase(){
+  clearMessage(ssh.messageBox);
+  const {items,invalidRows}=collectRows(ssh.databaseBody,['ip','username','password','snmp_community']);
+  if(invalidRows.length){
+    showMessage(ssh.messageBox,`Các dòng SSH ${invalidRows.join(', ')} đang thiếu IP, username, password hoặc SNMP CommunityString.`,'error');
+    return;
+  }
+  ssh.saveDbBtn.disabled=true;
+  try {
+    const data=await apiPost('/api/database',{servers:items});
+    renderSshDatabaseRows(data.servers || []);
+    showMessage(ssh.messageBox, data.message || 'Đã lưu database SSH thành công.','success');
+  } catch(e){
+    showMessage(ssh.messageBox,e.message || 'Không lưu được database SSH.','error');
+  } finally {
+    ssh.saveDbBtn.disabled=false;
+  }
+}
+
+async function saveWebDatabase(){
+  clearMessage(web.messageBox);
+  const {items,invalidRows}=collectRows(web.databaseBody,['domain']);
+  if(invalidRows.length){
+    showMessage(web.messageBox,`Các dòng website ${invalidRows.join(', ')} đang thiếu domain.`,'error');
+    return;
+  }
+  web.saveDbBtn.disabled=true;
+  try {
+    const data=await apiPost('/api/web-database',{websites:items});
+    renderWebDatabaseRows(data.websites || []);
+    showMessage(web.messageBox, data.message || 'Đã lưu database website thành công.','success');
+  } catch(e){
+    showMessage(web.messageBox,e.message || 'Không lưu được database website.','error');
+  } finally {
+    web.saveDbBtn.disabled=false;
+  }
+}
+
+async function saveSolutionDatabase(){
+  clearMessage(solution.messageBox);
+  const {items,invalidRows}=collectRows(solution.databaseBody,['name','endpoint','username','password','ssh_username','ssh_password','snmp_community','checkservice']);
+  if(invalidRows.length){
+    showMessage(solution.messageBox,`Các dòng giải pháp ${invalidRows.join(', ')} đang thiếu tên, endpoint, user/pass giao diện, user/pass SSH hoặc SNMP CommunityString.`,'error');
+    return;
+  }
+  solution.saveDbBtn.disabled=true;
+  try {
+    const data=await apiPost('/api/solution-database',{solutions:items});
+    renderSolutionDatabaseRows(data.solutions || []);
+    showMessage(solution.messageBox, data.message || 'Đã lưu database giải pháp thành công.','success');
+  } catch(e){
+    showMessage(solution.messageBox,e.message || 'Không lưu được database giải pháp.','error');
+  } finally {
+    solution.saveDbBtn.disabled=false;
+  }
+}
+
+async function scanSsh(){
+  clearMessage(ssh.messageBox);
+  ssh.scanBtn.disabled=true;
+  showMessage(ssh.messageBox,'Đang quét server: SNMP trước, lỗi thì fallback sang SSH...','info');
+  try {
+    const data=await apiPost('/api/scan');
+    renderThreeStatSummary(ssh,data.summary||{});
+    renderSshResults(data.results||[]);
+    showMessage(ssh.messageBox,`Quét xong ${data.summary.total} máy. Thành công: ${data.summary.success}, thất bại: ${data.summary.failed}.`,'success');
+  } catch(e){
+    showMessage(ssh.messageBox,e.message || 'Có lỗi xảy ra khi quét SSH.','error');
+  } finally {
+    ssh.scanBtn.disabled=false;
+  }
+}
+
+async function scanWebsites(){
+  clearMessage(web.messageBox);
+  web.scanBtn.disabled=true;
+  showMessage(web.messageBox,'Đang quét 5 domain trong database website...','info');
+  try {
+    const data=await apiPost('/api/web-scan');
+    renderThreeStatSummary(web,data.summary||{});
+    renderWebResults(data.results||[]);
+    showMessage(web.messageBox,`Quét website xong ${data.summary.total} domain. 200 OK: ${data.summary.success}, còn lại: ${data.summary.failed}.`,'success');
+  } catch(e){
+    showMessage(web.messageBox,e.message || 'Có lỗi xảy ra khi quét website.','error');
+  } finally {
+    web.scanBtn.disabled=false;
+  }
+}
+
+async function scanSolutions(){
+  clearMessage(solution.messageBox);
+  solution.scanBtn.disabled=true;
+  showMessage(solution.messageBox,'Đang quét giải pháp theo thứ tự SNMP → SSH → Giao diện...','info');
+  try {
+    const data=await apiPost('/api/solution-scan');
+    renderSolutionSummary(data.summary||{});
+    renderSolutionResults(data.results||[]);
+    showMessage(solution.messageBox,`Quét giải pháp xong ${data.summary.total} mục. Đang chạy: ${data.summary.running}, đăng nhập thành công: ${data.summary.login_success}, service running: ${data.summary.running_services || 0}/${data.summary.total_services || 0}, cần kiểm tra thêm: ${data.summary.issues}.`,'success');
+  } catch(e){
+    showMessage(solution.messageBox,e.message || 'Có lỗi xảy ra khi quét giải pháp.','error');
+  } finally {
+    solution.scanBtn.disabled=false;
+  }
+}
+
+ssh.toggleDbBtn.addEventListener('click', async ()=>{
+  try {
+    await setDatabaseVisible(ssh, ssh.databaseCard.classList.contains('hidden'), loadSshDatabase, 'Xem database SSH', 'Ẩn database SSH');
+  } catch(e){
+    showMessage(ssh.messageBox,e.message || 'Không tải được database SSH.','error');
+  }
+});
+ssh.hideDbBtn.addEventListener('click', async ()=> setDatabaseVisible(ssh,false,loadSshDatabase,'Xem database SSH','Ẩn database SSH'));
+ssh.saveDbBtn.addEventListener('click', saveSshDatabase);
+ssh.scanBtn.addEventListener('click', scanSsh);
+
+web.toggleDbBtn.addEventListener('click', async ()=>{
+  try {
+    await setDatabaseVisible(web, web.databaseCard.classList.contains('hidden'), loadWebDatabase, 'Xem database website', 'Ẩn database website');
+  } catch(e){
+    showMessage(web.messageBox,e.message || 'Không tải được database website.','error');
+  }
+});
+web.hideDbBtn.addEventListener('click', async ()=> setDatabaseVisible(web,false,loadWebDatabase,'Xem database website','Ẩn database website'));
+web.saveDbBtn.addEventListener('click', saveWebDatabase);
+web.scanBtn.addEventListener('click', scanWebsites);
+
+solution.toggleDbBtn.addEventListener('click', async ()=>{
+  try {
+    await setDatabaseVisible(solution, solution.databaseCard.classList.contains('hidden'), loadSolutionDatabase, 'Xem database giải pháp', 'Ẩn database giải pháp');
+  } catch(e){
+    showMessage(solution.messageBox,e.message || 'Không tải được database giải pháp.','error');
+  }
+});
+solution.hideDbBtn.addEventListener('click', async ()=> setDatabaseVisible(solution,false,loadSolutionDatabase,'Xem database giải pháp','Ẩn database giải pháp'));
+solution.saveDbBtn.addEventListener('click', saveSolutionDatabase);
+solution.scanBtn.addEventListener('click', scanSolutions);
 </script>
 </body>
 </html>
