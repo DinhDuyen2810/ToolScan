@@ -17,6 +17,7 @@ import paramiko
 import requests
 import urllib3
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 from requests import Response, Session
 from requests.auth import HTTPBasicAuth
@@ -48,21 +49,22 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / '.env')
+
 logging.basicConfig(level=os.getenv('LOGIN_LOG_LEVEL', 'INFO').upper(), format='[%(asctime)s] %(levelname)s %(message)s')
 logger = logging.getLogger('toolscan-login')
-
-BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / 'data'
 SSH_DATABASE_PATH = DATA_DIR / 'servers.json'
 WEB_DATABASE_PATH = DATA_DIR / 'websites.json'
 SOLUTION_DATABASE_PATH = DATA_DIR / 'solutions.json'
 
 DEFAULT_SERVERS = [
-    {'ip': '163.223.58.4', 'username': 'root', 'password': 't0ikonho@123', 'snmp_community': 'public'},
-    {'ip': '163.223.58.5', 'username': 'root', 'password': 't0ikonho@123', 'snmp_community': 'public'},
-    {'ip': '163.223.58.12', 'username': 'root', 'password': 'v2labadmin@123', 'snmp_community': 'public'},
-    {'ip': '163.223.58.13', 'username': 'root', 'password': 'v2labadmin@123', 'snmp_community': 'public'},
-    {'ip': '163.223.58.14', 'username': 'root', 'password': 'v2labadmin@123', 'snmp_community': 'public'},
+    {'ip': '163.223.58.4', 'username': 'root', 'password': 'pass_ssh_server_01', 'snmp_community': 'snmpstring_mac_dinh'},
+    {'ip': '163.223.58.5', 'username': 'root', 'password': 'pass_ssh_server_01', 'snmp_community': 'snmpstring_mac_dinh'},
+    {'ip': '163.223.58.12', 'username': 'root', 'password': 'pass_ssh_server_02', 'snmp_community': 'snmpstring_mac_dinh'},
+    {'ip': '163.223.58.13', 'username': 'root', 'password': 'pass_ssh_server_02', 'snmp_community': 'snmpstring_mac_dinh'},
+    {'ip': '163.223.58.14', 'username': 'root', 'password': 'pass_ssh_server_02', 'snmp_community': 'snmpstring_mac_dinh'},
 ]
 
 DEFAULT_WEBSITES = [
@@ -78,168 +80,168 @@ DEFAULT_SOLUTIONS = [
         'name': 'SIEM',
         'endpoint': '163.223.58.132',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'v2secure',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'WAF01',
         'endpoint': '163.223.58.130',
         'username': 'admin',
-        'password': 'admin',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'WAF02',
         'endpoint': '163.223.58.131',
         'username': 'admin',
-        'password': 'admin',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'EDR',
         'endpoint': '163.223.58.133',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NAC',
         'endpoint': '163.223.58.134',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_MCNB',
         'endpoint': '163.223.58.135',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_CSDL',
         'endpoint': '163.223.58.136',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_Tools',
         'endpoint': '163.223.58.137',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_LAN',
         'endpoint': '163.223.58.138',
         'username': 'admin',
-        'password': 'admin',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_DMZ',
         'endpoint': '163.223.58.139',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_V2Cloud',
         'endpoint': '163.223.58.144',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NIPS_MGT',
         'endpoint': '163.223.58.146',
         'username': 'admin',
-        'password': 'V2SocAdmin@828682',
-        'ssh_username': '',
-        'ssh_password': '',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
         'checkservice': True,
         'snmp_enabled': True,
-        'snmp_community': 'public',
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'PAM',
         'endpoint': '163.223.58.143',
-        'username': 'TTS_SOC_DNDuyen',
-        'password': 'DNDuyenSOC@2026$#',
-        'ssh_username': '',
-        'ssh_password': '',
-        'checkservice': False,
-        'snmp_enabled': False,
-        'snmp_community': 'public',
+        'username': 'admin',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
     {
         'name': 'NOC',
-        'endpoint': 'http://163.223.58.140/cacti/',
+        'endpoint': '163.223.58.150',
         'username': 'admin',
-        'password': 'V2labadmin@123',
-        'ssh_username': '',
-        'ssh_password': '',
-        'checkservice': False,
-        'snmp_enabled': False,
-        'snmp_community': 'public',
+        'password': 'pass_giai_phap',
+        'ssh_username': 'root',
+        'ssh_password': 'pass_ssh_root',
+        'checkservice': True,
+        'snmp_enabled': True,
+        'snmp_community': 'snmpstring_mac_dinh',
         'snmp_port': 161,
     },
 ]
@@ -268,11 +270,61 @@ DEFAULT_HEADERS = {
 
 MAX_SSH_SCAN_WORKERS = int(os.getenv('MAX_SSH_SCAN_WORKERS', '10'))
 MAX_WEB_SCAN_WORKERS = int(os.getenv('MAX_WEB_SCAN_WORKERS', '20'))
-MAX_SOLUTION_SCAN_WORKERS = int(os.getenv('MAX_SOLUTION_SCAN_WORKERS', '8'))
+MAX_SOLUTION_SCAN_WORKERS = int(os.getenv('MAX_SOLUTION_SCAN_WORKERS', '15'))
 WEBSITE_CONNECT_TIMEOUT = float(os.getenv('WEBSITE_CONNECT_TIMEOUT', '3'))
 WEBSITE_READ_TIMEOUT = float(os.getenv('WEBSITE_READ_TIMEOUT', '5'))
 SOLUTION_HTTP_TIMEOUT = float(os.getenv('SOLUTION_HTTP_TIMEOUT', '15'))
 LOGIN_TRACE_LIMIT = int(os.getenv('LOGIN_TRACE_LIMIT', '200'))
+
+SECRET_ALIAS_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+SECRET_ALIAS_EXAMPLE_TEXT = 'ví dụ pass_mac_dinh, pass_giai_phap, pass_ssh_root, snmpstring_mac_dinh'
+
+
+def normalize_secret_alias(value: Any) -> str:
+    return str(value or '').strip()
+
+
+def validate_secret_alias(alias: str, field_label: str, allow_blank: bool = False) -> None:
+    normalized = normalize_secret_alias(alias)
+    if not normalized:
+        if allow_blank:
+            return
+        raise ValueError(f'{field_label} không được để trống.')
+    if not SECRET_ALIAS_RE.fullmatch(normalized):
+        raise ValueError(f'{field_label} phải là alias trong .env ({SECRET_ALIAS_EXAMPLE_TEXT}). Không nhập mật khẩu/SNMP thật trực tiếp trên giao diện.')
+
+
+def resolve_secret_alias(alias: str, field_label: str, allow_blank: bool = False) -> str:
+    normalized = normalize_secret_alias(alias)
+    if not normalized:
+        if allow_blank:
+            return ''
+        raise ValueError(f'{field_label} không được để trống.')
+    env_name = normalized.upper()
+    resolved = os.getenv(env_name, '').strip()
+    if not resolved:
+        raise ValueError(f'Chưa khai báo {env_name} trong file .env cho {field_label}.')
+    return resolved
+
+
+def resolve_server_secrets(server: dict[str, Any]) -> dict[str, str]:
+    resolved = dict(server)
+    resolved['password'] = resolve_secret_alias(server.get('password', ''), 'SSH password')
+    resolved['snmp_community'] = resolve_secret_alias(server.get('snmp_community', ''), 'SNMP CommunityString')
+    return resolved
+
+
+def resolve_solution_secrets(solution: dict[str, Any]) -> dict[str, Any]:
+    resolved = dict(solution)
+    if resolved.get('password'):
+        resolved['password'] = resolve_secret_alias(resolved.get('password', ''), 'Pass giao diện', allow_blank=True)
+    if resolved.get('ssh_password'):
+        resolved['ssh_password'] = resolve_secret_alias(resolved.get('ssh_password', ''), 'Pass SSH', allow_blank=True)
+    if resolved.get('snmp_enabled', True):
+        resolved['snmp_community'] = resolve_secret_alias(resolved.get('snmp_community', ''), 'SNMP CommunityString')
+    else:
+        resolved['snmp_community'] = normalize_secret_alias(resolved.get('snmp_community', ''))
+    return resolved
 
 
 def _compact(value: Any, limit: int = 220) -> str:
@@ -302,7 +354,7 @@ SSH_COMMAND_TIMEOUT = float(os.getenv('SSH_COMMAND_TIMEOUT', '10'))
 SNMP_DEFAULT_TIMEOUT = int(os.getenv('SNMP_DEFAULT_TIMEOUT', '1'))
 SNMP_DEFAULT_RETRIES = int(os.getenv('SNMP_DEFAULT_RETRIES', '0'))
 PROXY_SNMP_USERNAME = os.getenv('PROXY_SNMP_USERNAME', 'root')
-PROXY_SNMP_PASSWORD = os.getenv('PROXY_SNMP_PASSWORD', 'Vipstmt@828912')
+PROXY_SNMP_PASSWORD = os.getenv('PROXY_SNMP_PASSWORD', '').strip()
 PROXY_SNMP_HOPS = [
     {'host': os.getenv('PROXY_SNMP_HOST_1', '163.223.58.150'), 'username': PROXY_SNMP_USERNAME, 'password': PROXY_SNMP_PASSWORD, 'label': 'SNMP@150'},
     {'host': os.getenv('PROXY_SNMP_HOST_2', '163.223.58.132'), 'username': PROXY_SNMP_USERNAME, 'password': PROXY_SNMP_PASSWORD, 'label': 'SNMP@132'},
@@ -333,8 +385,8 @@ def normalize_server(raw: dict[str, Any]) -> dict[str, str]:
     return {
         'ip': str(raw.get('ip', '')).strip(),
         'username': str(raw.get('username', '')).strip(),
-        'password': str(raw.get('password', '')).strip(),
-        'snmp_community': str(raw.get('snmp_community', raw.get('community', 'public'))).strip(),
+        'password': normalize_secret_alias(raw.get('password', '')),
+        'snmp_community': normalize_secret_alias(raw.get('snmp_community', raw.get('community', ''))),
     }
 
 
@@ -344,7 +396,9 @@ def validate_servers(servers: list[dict[str, Any]]) -> list[dict[str, str]]:
         raise ValueError('Database SSH phải có ít nhất 1 dòng máy.')
     for index, server in enumerate(cleaned, start=1):
         if not (server['ip'] and server['username'] and server['password'] and server['snmp_community']):
-            raise ValueError(f'Dòng SSH {index} đang thiếu IP, username, password hoặc SNMP CommunityString.')
+            raise ValueError(f'Dòng SSH {index} đang thiếu IP, username, password alias hoặc SNMP CommunityString alias.')
+        validate_secret_alias(server['password'], f'Dòng SSH {index} - password')
+        validate_secret_alias(server['snmp_community'], f'Dòng SSH {index} - SNMP CommunityString')
     return cleaned
 
 
@@ -375,14 +429,14 @@ def normalize_solution(raw: dict[str, Any]) -> dict[str, Any]:
         'name': str(raw.get('name', '')).strip(),
         'endpoint': str(endpoint).strip(),
         'username': str(raw.get('username', '')).strip(),
-        'password': str(raw.get('password', '')).strip(),
+        'password': normalize_secret_alias(raw.get('password', '')),
         'ssh_username': str(raw.get('ssh_username', raw.get('ssh_user', ''))).strip(),
-        'ssh_password': str(raw.get('ssh_password', raw.get('ssh_pass', ''))).strip(),
+        'ssh_password': normalize_secret_alias(raw.get('ssh_password', raw.get('ssh_pass', ''))),
         'checkservice': to_bool(raw.get('checkservice', False)),
         'snmp_enabled': to_bool(raw.get('snmp_enabled', raw.get('use_snmp', True))),
         'snmp_port': int(str(raw.get('snmp_port', raw.get('port', 161)) or '161')),
         'snmp_version': str(raw.get('snmp_version', raw.get('version', '2c'))).strip().lower() or '2c',
-        'snmp_community': str(raw.get('snmp_community', raw.get('community', 'public'))).strip() or 'public',
+        'snmp_community': normalize_secret_alias(raw.get('snmp_community', raw.get('community', ''))),
         'snmp_timeout': int(str(raw.get('snmp_timeout', SNMP_DEFAULT_TIMEOUT)) or str(SNMP_DEFAULT_TIMEOUT)),
         'snmp_retries': int(str(raw.get('snmp_retries', SNMP_DEFAULT_RETRIES)) or str(SNMP_DEFAULT_RETRIES)),
     }
@@ -395,8 +449,16 @@ def validate_solutions(solutions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for index, solution in enumerate(cleaned, start=1):
         if not solution['name'] or not solution['endpoint']:
             raise ValueError(f'Dòng giải pháp {index} đang thiếu tên hoặc endpoint.')
-        if solution.get('snmp_enabled') and not solution.get('snmp_community'):
-            raise ValueError(f'Dòng giải pháp {index} đã bật SNMP nhưng thiếu SNMP CommunityString.')
+        if solution.get('password'):
+            validate_secret_alias(solution['password'], f'Dòng giải pháp {index} - pass giao diện', allow_blank=True)
+        if solution.get('ssh_password'):
+            validate_secret_alias(solution['ssh_password'], f'Dòng giải pháp {index} - pass SSH', allow_blank=True)
+        if solution.get('snmp_enabled'):
+            if not solution.get('snmp_community'):
+                raise ValueError(f'Dòng giải pháp {index} đã bật SNMP nhưng thiếu SNMP CommunityString alias.')
+            validate_secret_alias(solution['snmp_community'], f'Dòng giải pháp {index} - SNMP CommunityString')
+        elif solution.get('snmp_community'):
+            validate_secret_alias(solution['snmp_community'], f'Dòng giải pháp {index} - SNMP CommunityString', allow_blank=True)
     return cleaned
 
 
@@ -1014,6 +1076,7 @@ df -P / | awk "NR==2 {print \$5}"
 
 
 def check_one_server(index: int, server: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    server = resolve_server_secrets(normalize_server(server))
     ip = server['ip']
     username = server['username']
 
@@ -1021,7 +1084,7 @@ def check_one_server(index: int, server: dict[str, Any]) -> tuple[int, dict[str,
     ssh_error = ''
 
     try:
-        snmp_metrics = fetch_server_metrics_snmp(server)
+        snmp_metrics, snmp_source, _snmp_note = fetch_server_metrics_snmp(server)
         log_server_metric_source(ip, 'SNMP', 'Lấy dữ liệu thành công', snmp_metrics)
         return index, {
             'ip': ip,
@@ -1154,7 +1217,7 @@ def fetch_solution_metrics_snmp(solution: dict[str, Any]) -> tuple[dict[str, str
 
 
 def check_one_solution(index: int, solution: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    cleaned = normalize_solution(solution)
+    cleaned = resolve_solution_secrets(normalize_solution(solution))
     name = cleaned['name']
     endpoint = cleaned['endpoint']
     username = cleaned['username']

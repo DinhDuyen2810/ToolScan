@@ -67,7 +67,7 @@
 <div class="container">
   <div class="card">
     <h1>Tool kiểm tra SSH, Website và Giải pháp</h1>
-    <p class="page-subtitle"><strong>Mục I</strong> quét SSH/SNMP. <strong>Mục II</strong> quét website. <strong>Mục III</strong> quét giải pháp theo thứ tự SNMP → SSH → Giao diện, và có thể bung chi tiết service nếu bật CheckService.</p>
+    <p class="page-subtitle"><strong>Mục I</strong> quét SSH/SNMP. <strong>Mục II</strong> quét website. <strong>Mục III</strong> quét giải pháp theo thứ tự SNMP → SSH → Giao diện. Các trường nhạy cảm chỉ nhập <strong>alias</strong> từ <span class="mono">.env</span> như <span class="mono">pass_mac_dinh</span>, <span class="mono">pass_giai_phap</span>, <span class="mono">pass_ssh_root</span>, <span class="mono">snmpstring_mac_dinh</span>.</p>
   </div>
 
   <div class="card">
@@ -84,15 +84,15 @@
   </div>
   <div class="card hidden" id="sshDatabaseCard">
     <div class="section-header"><h3>Database SSH</h3><button class="btn-secondary" id="sshHideDbBtn" type="button">Ẩn database SSH</button></div>
-    <div class="table-caption"><div class="muted">Có thể thêm hoặc xóa dòng trực tiếp rồi bấm lưu.</div><button class="btn-secondary" id="sshAddRowBtn" type="button">Thêm dòng</button></div>
+    <div class="table-caption"><div class="muted">Có thể thêm hoặc xóa dòng trực tiếp rồi bấm lưu. Trường nhạy cảm chỉ nhập alias trong <span class="mono">.env</span>.</div><button class="btn-secondary" id="sshAddRowBtn" type="button">Thêm dòng</button></div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
           <tr>
             <th>IP</th>
             <th>Username</th>
-            <th>Password</th>
-            <th>SNMP CommunityString</th>
+            <th>Password alias (.env)</th>
+            <th>SNMP alias</th>
             <th class="cell-actions">Thao tác</th>
           </tr>
         </thead>
@@ -170,7 +170,7 @@
   </div>
   <div class="card hidden" id="solutionDatabaseCard">
     <div class="section-header"><h3>Database giải pháp</h3><button class="btn-secondary" id="solutionHideDbBtn" type="button">Ẩn database giải pháp</button></div>
-    <div class="table-caption"><div class="muted">Tên và endpoint là bắt buộc. Chỉ cần SNMP CommunityString khi bật SNMP.</div><button class="btn-secondary" id="solutionAddRowBtn" type="button">Thêm dòng</button></div>
+    <div class="table-caption"><div class="muted">Tên và endpoint là bắt buộc. Các trường pass/SNMP chỉ nhập alias trong <span class="mono">.env</span>.</div><button class="btn-secondary" id="solutionAddRowBtn" type="button">Thêm dòng</button></div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -178,11 +178,11 @@
             <th>Tên giải pháp</th>
             <th>Endpoint / URL</th>
             <th>User giao diện</th>
-            <th>Pass giao diện</th>
+            <th>Pass giao diện alias</th>
             <th>User SSH</th>
-            <th>Pass SSH</th>
+            <th>Pass SSH alias</th>
             <th>SNMP bật</th>
-            <th>SNMP CommunityString</th>
+            <th>SNMP alias</th>
             <th>SNMP Port</th>
             <th>CheckService</th>
             <th class="cell-actions">Thao tác</th>
@@ -310,13 +310,13 @@ function emptyWebRow(){ return '<tr><td colspan="2" class="empty">Chưa có dữ
 function emptySolutionRow(){ return '<tr><td colspan="11" class="empty">Chưa có dữ liệu.</td></tr>'; }
 
 function renderSshDatabaseRows(items){
-  const rows = (items || []).length ? items : [{ip:'', username:'', password:'', snmp_community:'public'}];
+  const rows = (items || []).length ? items : [{ip:'', username:'', password:'pass_ssh_server_01', snmp_community:'snmpstring_mac_dinh'}];
   ssh.databaseBody.innerHTML = rows.map(i=>`
     <tr>
       <td><input type="text" data-field="ip" value="${esc(i.ip)}"></td>
       <td><input type="text" data-field="username" value="${esc(i.username)}"></td>
-      <td><input type="text" data-field="password" value="${esc(i.password)}"></td>
-      <td><input type="text" data-field="snmp_community" value="${esc(i.snmp_community || 'public')}"></td>
+      <td><input type="text" data-field="password" value="${esc(i.password)}" placeholder="pass_ssh_server_01"></td>
+      <td><input type="text" data-field="snmp_community" value="${esc(i.snmp_community || 'snmpstring_mac_dinh')}" placeholder="snmpstring_mac_dinh"></td>
       <td><button type="button" class="btn-danger btn-delete-row">Xóa</button></td>
     </tr>
   `).join('');
@@ -335,17 +335,17 @@ function renderWebDatabaseRows(items){
 }
 
 function renderSolutionDatabaseRows(items){
-  const rows = (items || []).length ? items : [{name:'',endpoint:'',username:'',password:'',ssh_username:'',ssh_password:'',snmp_enabled:true,snmp_community:'public',snmp_port:161,checkservice:false}];
+  const rows = (items || []).length ? items : [{name:'',endpoint:'',username:'',password:'pass_giai_phap',ssh_username:'root',ssh_password:'pass_ssh_root',snmp_enabled:true,snmp_community:'snmpstring_mac_dinh',snmp_port:161,checkservice:false}];
   solution.databaseBody.innerHTML = rows.map(i=>`
     <tr>
       <td><input type="text" data-field="name" value="${esc(i.name)}"></td>
       <td><input type="text" data-field="endpoint" value="${esc(i.endpoint)}"></td>
       <td><input type="text" data-field="username" value="${esc(i.username)}"></td>
-      <td><input type="text" data-field="password" value="${esc(i.password)}"></td>
+      <td><input type="text" data-field="password" value="${esc(i.password)}" placeholder="pass_giai_phap"></td>
       <td><input type="text" data-field="ssh_username" value="${esc(i.ssh_username || '')}"></td>
-      <td><input type="text" data-field="ssh_password" value="${esc(i.ssh_password || '')}"></td>
+      <td><input type="text" data-field="ssh_password" value="${esc(i.ssh_password || '')}" placeholder="pass_ssh_root"></td>
       <td style="text-align:center;"><input type="checkbox" data-field="snmp_enabled" ${i.snmp_enabled !== false ? 'checked' : ''}></td>
-      <td><input type="text" data-field="snmp_community" value="${esc(i.snmp_community || 'public')}"></td>
+      <td><input type="text" data-field="snmp_community" value="${esc(i.snmp_community || 'snmpstring_mac_dinh')}" placeholder="snmpstring_mac_dinh"></td>
       <td><input type="number" data-field="snmp_port" value="${esc(i.snmp_port || 161)}" min="1"></td>
       <td style="text-align:center;"><input type="checkbox" data-field="checkservice" ${i.checkservice ? 'checked' : ''}></td>
       <td><button type="button" class="btn-danger btn-delete-row">Xóa</button></td>
@@ -544,7 +544,7 @@ async function loadSolutionDatabase(){
 
 function addSshRow(){
   const items = collectRows(ssh.databaseBody,['ip','username','password','snmp_community']).items;
-  items.push({ip:'', username:'', password:'', snmp_community:'public'});
+  items.push({ip:'', username:'', password:'pass_ssh_server_01', snmp_community:'snmpstring_mac_dinh'});
   renderSshDatabaseRows(items);
 }
 
@@ -556,7 +556,7 @@ function addWebRow(){
 
 function addSolutionRow(){
   const items = collectSolutionRows(solution.databaseBody).items;
-  items.push({name:'',endpoint:'',username:'',password:'',ssh_username:'',ssh_password:'',snmp_enabled:true,snmp_community:'public',snmp_port:161,checkservice:false});
+  items.push({name:'',endpoint:'',username:'',password:'pass_giai_phap',ssh_username:'root',ssh_password:'pass_ssh_root',snmp_enabled:true,snmp_community:'snmpstring_mac_dinh',snmp_port:161,checkservice:false});
   renderSolutionDatabaseRows(items);
 }
 
@@ -564,7 +564,7 @@ async function saveSshDatabase(){
   clearMessage(ssh.messageBox);
   const {items,invalidRows}=collectRows(ssh.databaseBody,['ip','username','password','snmp_community']);
   if(!items.length){ showMessage(ssh.messageBox,'Database SSH phải có ít nhất 1 dòng.','error'); return; }
-  if(invalidRows.length){ showMessage(ssh.messageBox,`Các dòng SSH ${invalidRows.join(', ')} đang thiếu IP, username, password hoặc SNMP CommunityString.`,'error'); return; }
+  if(invalidRows.length){ showMessage(ssh.messageBox,`Các dòng SSH ${invalidRows.join(', ')} đang thiếu IP, username, password alias hoặc SNMP alias.`,'error'); return; }
   ssh.saveDbBtn.disabled=true;
   try {
     const data=await apiPost('/api/database',{servers:items});
@@ -602,7 +602,7 @@ async function saveSolutionDatabase(){
   clearMessage(solution.messageBox);
   const {items,invalidRows}=collectSolutionRows(solution.databaseBody);
   if(!items.length){ showMessage(solution.messageBox,'Database giải pháp phải có ít nhất 1 dòng.','error'); return; }
-  if(invalidRows.length){ showMessage(solution.messageBox,`Các dòng giải pháp ${invalidRows.join(', ')} đang thiếu tên, endpoint hoặc SNMP CommunityString khi SNMP đang bật.`,'error'); return; }
+  if(invalidRows.length){ showMessage(solution.messageBox,`Các dòng giải pháp ${invalidRows.join(', ')} đang thiếu tên, endpoint hoặc SNMP alias khi SNMP đang bật.`,'error'); return; }
   solution.saveDbBtn.disabled=true;
   try {
     const data=await apiPost('/api/solution-database',{solutions:items});
