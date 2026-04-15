@@ -43,6 +43,10 @@
     .badge-failed { background:#fee2e2; color:#991b1b; }
     .badge-info { background:#e0f2fe; color:#075985; }
     .badge-muted { background:#f3f4f6; color:#4b5563; }
+    .metric-warn { background:#fef3c7; color:#92400e; font-weight:700; border-radius:8px; padding:6px 8px; display:inline-block; min-width:72px; text-align:center; }
+    .metric-high { background:#fed7aa; color:#9a3412; font-weight:700; border-radius:8px; padding:6px 8px; display:inline-block; min-width:72px; text-align:center; }
+    .metric-critical { background:#fecaca; color:#991b1b; font-weight:700; border-radius:8px; padding:6px 8px; display:inline-block; min-width:72px; text-align:center; }
+    .metric-normal { display:inline-block; min-width:72px; }
     .empty { color:#6b7280; padding:18px 0 8px; }
     .mono { font-family: Consolas, Monaco, monospace; word-break: break-all; }
     .spacer { height:6px; }
@@ -149,7 +153,7 @@
   </div>
   <div class="card">
     <div class="section-header"><h3>Kết quả quét website</h3></div>
-    <div style="overflow-x:auto;"><table><thead><tr><th>Domain</th><th>URL kiểm tra</th><th>HTTP status</th><th>Kết quả</th></tr></thead><tbody id="webResultBody"><tr><td colspan="4" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
+    <div style="overflow-x:auto;"><table><thead><tr><th>Domain</th><th>IP public</th><th>URL kiểm tra</th><th>HTTP status</th><th>Kết quả</th><th class="cell-actions">Quét lẻ</th></tr></thead><tbody id="webResultBody"><tr><td colspan="6" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
   </div>
 
   <div class="spacer"></div>
@@ -231,6 +235,30 @@ const solution = {messageBox:solutionMessageBox,summaryBox:solutionSummaryBox,to
 let sshResultsState = [];
 let webResultsState = [];
 let solutionResultsState = [];
+
+
+function inferScanned(item){
+  if(!item || typeof item !== 'object') return false;
+  return !!(item.has_scanned || item.checked_url || item.http_status || item.status || item.public_ip || item.note || item.login_status || item.metric_source || item.cpu_percent || item.ram_percent || item.storage_percent);
+}
+
+function metricClass(value){
+  const text = String(value || '').trim();
+  const match = text.match(/-?\d+(?:[.,]\d+)?/);
+  if(!match) return 'metric-normal';
+  const num = parseFloat(match[0].replace(',', '.'));
+  if(Number.isNaN(num)) return 'metric-normal';
+  if(num > 95) return 'metric-critical';
+  if(num > 90) return 'metric-high';
+  if(num > 80) return 'metric-warn';
+  return 'metric-normal';
+}
+
+function renderMetric(value){
+  const text = String(value || '').trim();
+  if(!text) return '';
+  return `<span class="${metricClass(text)}">${esc(text)}</span>`;
+}
 
 
 function bindDeleteRow(body, emptyBuilder){
@@ -408,11 +436,24 @@ function buildSshPlaceholderResults(items){
 }
 
 function buildWebPlaceholderResults(items){
-  return (items || []).map(item => ({ domain: item.domain || '', checked_url: '', http_status: '', status: '', is_success: false, error: '', has_scanned: false }));
+  return (items || []).map(item => ({ domain: item.domain || '', public_ip: '', checked_url: '', http_status: '', status: '', is_success: false, error: '', has_scanned: false }));
 }
 
 function buildSolutionPlaceholderResults(items){
   return (items || []).map(item => ({ name: item.name || '', endpoint: item.endpoint || '', username: item.username || '', checked_url: '', http_status: '', login_status: '', running_status: '', status: '', note: '', is_success: false, is_running: false, checkservice: !!item.checkservice, service_summary: '', services: [], cpu_percent: '', ram_percent: '', storage_percent: '', service_running_count: 0, service_total_count: 0, metric_source: '', has_scanned: false }));
+}
+
+
+function mergeResultsByKey(currentItems, databaseItems, keyBuilder, placeholderBuilder){
+  const currentMap = new Map((Array.isArray(currentItems) ? currentItems : []).map(item => [keyBuilder(item), item]));
+  return (databaseItems || []).map((dbItem, index) => {
+    const key = keyBuilder(dbItem);
+    const existing = currentMap.get(key);
+    if(existing){
+      return { ...existing, ...Object.fromEntries(Object.entries(dbItem).filter(([_, v]) => v !== undefined)), has_scanned: !!existing.has_scanned };
+    }
+    return placeholderBuilder(dbItem, index);
+  });
 }
 
 function renderSshResults(items){
@@ -422,9 +463,9 @@ function renderSshResults(items){
       <td>${esc(i.ip)}</td>
       <td>${i.has_scanned ? `<span class="badge ${String(i.metric_source || '').includes('150') ? 'badge-info' : (String(i.metric_source || '').includes('132') ? 'badge-info' : (i.metric_source === 'SSH' ? 'badge-muted' : (i.metric_source ? 'badge-success' : 'badge-failed')))}">${esc(i.metric_source || '')}</span>` : ''}</td>
       <td>${esc(i.username)}</td>
-      <td>${esc(i.cpu_percent || '')}</td>
-      <td>${esc(i.ram_percent || '')}</td>
-      <td>${esc(i.storage_percent || '')}</td>
+      <td>${renderMetric(i.cpu_percent || '')}</td>
+      <td>${renderMetric(i.ram_percent || '')}</td>
+      <td>${renderMetric(i.storage_percent || '')}</td>
       <td>${i.has_scanned ? `<span class="badge ${i.is_success?'badge-success':'badge-failed'}" title="${esc(i.error || '')}">${esc(i.status || '')}</span>` : ''}</td>
       <td><button type="button" class="btn-secondary btn-single-scan" data-type="ssh" data-index="${index}">Quét</button></td>
     </tr>
@@ -432,16 +473,17 @@ function renderSshResults(items){
 }
 
 function renderWebResults(items){
-  webResultsState = Array.isArray(items) ? items.map(i => ({has_scanned:true, ...i})) : [];
+  webResultsState = Array.isArray(items) ? items.map(i => ({...i, has_scanned: inferScanned(i)})) : [];
   web.resultBody.innerHTML = webResultsState.length ? webResultsState.map((i,index)=>`
     <tr>
       <td>${esc(i.domain)}</td>
+      <td class="mono">${esc(i.public_ip || '')}</td>
       <td class="mono">${esc(i.checked_url || '')}</td>
       <td>${esc(i.http_status || '')}</td>
       <td>${i.has_scanned ? `<span class="badge ${i.is_success?'badge-success':'badge-failed'}">${esc(i.status || '')}</span>` : ''}</td>
       <td><button type="button" class="btn-secondary btn-single-scan" data-type="web" data-index="${index}">Quét</button></td>
     </tr>
-  `).join('') : '<tr><td colspan="5" class="empty">Chưa có dữ liệu.</td></tr>';
+  `).join('') : '<tr><td colspan="6" class="empty">Chưa có dữ liệu.</td></tr>';
 }
 
 function renderSolutionResults(items){
@@ -474,9 +516,9 @@ function renderSolutionResults(items){
         <td>${item.has_scanned ? `<span class="badge ${item.is_success ? 'badge-success' : 'badge-failed'}" title="${esc(loginTitle)}">${esc(item.login_status || '')}</span>` : ''}</td>
         <td>${item.has_scanned ? `<span class="badge ${item.is_running ? 'badge-info' : 'badge-failed'}" title="${esc(runningTitle)}">${esc(item.running_status || '')}</span>` : ''}</td>
         <td>${item.has_scanned ? `<span class="badge ${metricSourceClass}">${esc(item.metric_source || '')}</span>` : ''}</td>
-        <td>${esc(item.cpu_percent || '')}</td>
-        <td>${esc(item.ram_percent || '')}</td>
-        <td>${esc(item.storage_percent || '')}</td>
+        <td>${renderMetric(item.cpu_percent || '')}</td>
+        <td>${renderMetric(item.ram_percent || '')}</td>
+        <td>${renderMetric(item.storage_percent || '')}</td>
         <td><button type="button" class="btn-secondary btn-single-scan" data-type="solution" data-index="${idx}">Quét</button></td>
       </tr>
     `);
@@ -517,7 +559,7 @@ async function loadSshDatabase(){
   const data = await apiGet('/api/database');
   const items = data.servers || [];
   renderSshDatabaseRows(items);
-  sshResultsState = buildSshPlaceholderResults(items);
+  sshResultsState = mergeResultsByKey(sshResultsState, items, item => `${item.ip || ''}|${item.username || ''}`, item => ({ ip: item.ip || '', username: item.username || '', metric_source: '', cpu_percent: '', ram_percent: '', storage_percent: '', status: '', is_success: false, error: '', has_scanned: false }));
   ssh.resultBody.innerHTML = '';
   renderSshResults(sshResultsState);
 }
@@ -527,7 +569,7 @@ async function loadWebDatabase(){
   const data = await apiGet('/api/web-database');
   const items = data.websites || [];
   renderWebDatabaseRows(items);
-  webResultsState = buildWebPlaceholderResults(items);
+  webResultsState = mergeResultsByKey(webResultsState, items, item => `${item.domain || ''}`, item => ({ domain: item.domain || '', public_ip: '', checked_url: '', http_status: '', status: '', is_success: false, error: '', has_scanned: false }));
   web.resultBody.innerHTML = '';
   renderWebResults(webResultsState);
 }
@@ -537,7 +579,7 @@ async function loadSolutionDatabase(){
   const data = await apiGet('/api/solution-database');
   const items = data.solutions || [];
   renderSolutionDatabaseRows(items);
-  solutionResultsState = buildSolutionPlaceholderResults(items);
+  solutionResultsState = mergeResultsByKey(solutionResultsState, items, item => `${item.name || ''}|${item.endpoint || ''}`, item => ({ name: item.name || '', endpoint: item.endpoint || '', username: item.username || '', checked_url: '', http_status: '', login_status: '', running_status: '', status: '', note: '', is_success: false, is_running: false, checkservice: !!item.checkservice, service_summary: '', services: [], cpu_percent: '', ram_percent: '', storage_percent: '', service_running_count: 0, service_total_count: 0, metric_source: '', has_scanned: false }));
   solution.resultBody.innerHTML = '';
   renderSolutionResults(solutionResultsState);
 }
@@ -569,7 +611,7 @@ async function saveSshDatabase(){
   try {
     const data=await apiPost('/api/database',{servers:items});
     renderSshDatabaseRows(data.servers || []);
-    sshResultsState = buildSshPlaceholderResults(data.servers || []);
+    sshResultsState = mergeResultsByKey(sshResultsState, data.servers || [], item => `${item.ip || ''}|${item.username || ''}`, item => ({ ip: item.ip || '', username: item.username || '', metric_source: '', cpu_percent: '', ram_percent: '', storage_percent: '', status: '', is_success: false, error: '', has_scanned: false }));
     renderSshResults(sshResultsState);
     showMessage(ssh.messageBox, data.message || 'Đã lưu database SSH thành công.','success');
   } catch(e){
@@ -588,7 +630,7 @@ async function saveWebDatabase(){
   try {
     const data=await apiPost('/api/web-database',{websites:items});
     renderWebDatabaseRows(data.websites || []);
-    webResultsState = buildWebPlaceholderResults(data.websites || []);
+    webResultsState = mergeResultsByKey(webResultsState, data.websites || [], item => `${item.domain || ''}`, item => ({ domain: item.domain || '', public_ip: '', checked_url: '', http_status: '', status: '', is_success: false, error: '', has_scanned: false }));
     renderWebResults(webResultsState);
     showMessage(web.messageBox, data.message || 'Đã lưu database website thành công.','success');
   } catch(e){
@@ -607,7 +649,7 @@ async function saveSolutionDatabase(){
   try {
     const data=await apiPost('/api/solution-database',{solutions:items});
     renderSolutionDatabaseRows(data.solutions || []);
-    solutionResultsState = buildSolutionPlaceholderResults(data.solutions || []);
+    solutionResultsState = mergeResultsByKey(solutionResultsState, data.solutions || [], item => `${item.name || ''}|${item.endpoint || ''}`, item => ({ name: item.name || '', endpoint: item.endpoint || '', username: item.username || '', checked_url: '', http_status: '', login_status: '', running_status: '', status: '', note: '', is_success: false, is_running: false, checkservice: !!item.checkservice, service_summary: '', services: [], cpu_percent: '', ram_percent: '', storage_percent: '', service_running_count: 0, service_total_count: 0, metric_source: '', has_scanned: false }));
     renderSolutionResults(solutionResultsState);
     showMessage(solution.messageBox, data.message || 'Đã lưu database giải pháp thành công.','success');
   } catch(e){
