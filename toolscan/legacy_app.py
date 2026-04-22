@@ -13,7 +13,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 
 import paramiko
 import requests
@@ -654,8 +654,28 @@ def filter_items_by_group(items: list[dict[str, Any]], group: str | None) -> lis
     return [item for item in items if normalize_group_name(item.get('group', DEFAULT_GROUP_NAME)) == group]
 
 
+def _get_running_scan_job() -> dict[str, Any] | None:
+    _cleanup_scan_jobs()
+    with SCAN_JOB_LOCK:
+        for job in SCAN_JOBS.values():
+            if str(job.get('status') or '').lower() == 'running':
+                return dict(job)
+    return None
+
+
+def _ensure_no_running_scan(job_label: str = 'scan') -> None:
+    running_job = _get_running_scan_job()
+    if running_job:
+        kind = str(running_job.get('kind') or 'scan')
+        raise RuntimeError(f'Đang có tiến trình {kind} chạy nền. Hãy chờ tiến trình hiện tại hoàn tất trước khi tạo {job_label} mới.')
+
+
 @app.post('/api/scan')
 def scan_servers() -> Any:
+    try:
+        _ensure_no_running_scan('scan SSH')
+    except RuntimeError as exc:
+        return jsonify({'error': str(exc)}), 409
     servers = filter_items_by_group(load_servers(), get_requested_group())
     results = run_parallel_checks(servers, check_one_server, max_workers=MAX_SSH_SCAN_WORKERS)
     success_count = sum(1 for item in results if item['is_success'])
@@ -671,6 +691,10 @@ def scan_servers() -> Any:
 
 @app.post('/api/web-scan')
 def scan_websites() -> Any:
+    try:
+        _ensure_no_running_scan('scan website')
+    except RuntimeError as exc:
+        return jsonify({'error': str(exc)}), 409
     websites = filter_items_by_group(load_websites(), get_requested_group())
     results = run_parallel_checks(websites, check_one_website, max_workers=MAX_WEB_SCAN_WORKERS)
     results = [{**item, 'has_scanned': True} for item in results]
@@ -687,6 +711,10 @@ def scan_websites() -> Any:
 
 @app.post('/api/solution-scan')
 def scan_solutions() -> Any:
+    try:
+        _ensure_no_running_scan('scan giải pháp')
+    except RuntimeError as exc:
+        return jsonify({'error': str(exc)}), 409
     solutions = filter_items_by_group(load_solutions(), get_requested_group())
     results = run_parallel_checks(solutions, check_one_solution, max_workers=MAX_SOLUTION_SCAN_WORKERS)
     running_count = sum(1 for item in results if item.get('is_running'))
@@ -710,6 +738,7 @@ def scan_solutions() -> Any:
 @app.post('/api/scan-one')
 def scan_one_server_route() -> Any:
     try:
+        _ensure_no_running_scan('scan riêng server')
         index = _parse_scan_index()
         servers = load_servers()
         server = _pick_item_by_index(servers, index, 'SSH')
@@ -725,6 +754,7 @@ def scan_one_server_route() -> Any:
 @app.post('/api/web-scan-one')
 def scan_one_website_route() -> Any:
     try:
+        _ensure_no_running_scan('scan riêng website')
         index = _parse_scan_index()
         websites = load_websites()
         website = _pick_item_by_index(websites, index, 'website')
@@ -740,6 +770,7 @@ def scan_one_website_route() -> Any:
 @app.post('/api/solution-scan-one')
 def scan_one_solution_route() -> Any:
     try:
+        _ensure_no_running_scan('scan riêng giải pháp')
         index = _parse_scan_index()
         solutions = load_solutions()
         solution = _pick_item_by_index(solutions, index, 'giải pháp')
@@ -943,6 +974,7 @@ def start_scan_job_route() -> Any:
     if not kind:
         return jsonify({'error': 'Thiếu kind cho scan job.'}), 400
     try:
+        _ensure_no_running_scan(kind)
         job_id = _start_scan_job(kind, payload)
     except Exception as exc:
         return jsonify({'error': f'Không tạo được scan job: {exc}'}), 500
@@ -2333,8 +2365,17 @@ def _run_scan_job(job_id: str, kind: str, payload: dict[str, Any]) -> None:
         elif kind == 'solution-one':
             index = int(payload['index'])
             item = _pick_item_by_index(load_solutions(), index, 'giải pháp')
-            _, one_result = check_one_solution(index, item)
-            _update_scan_job_progress(job_id, 0, one_result)
+            with SCAN_JOB_LOCK:
+                if job_id in SCAN_JOBS:
+                    SCAN_JOBS[job_id]['total_items'] = 4
+            _, phase_result, cleaned = _solution_metric_phase(index, item)
+            _update_scan_job_progress(job_id, 0, {**phase_result, 'has_scanned': True})
+            phase_result = _solution_storage_phase(phase_result, cleaned)
+            _update_scan_job_progress(job_id, 0, {**phase_result, 'has_scanned': True})
+            phase_result = _solution_login_phase(phase_result, cleaned)
+            _update_scan_job_progress(job_id, 0, {**phase_result, 'has_scanned': True})
+            one_result = _solution_index_phase(phase_result, cleaned)
+            _update_scan_job_progress(job_id, 0, {**one_result, 'has_scanned': True})
             result = {'index': index, 'result': one_result}
         else:
             raise ValueError(f'Unknown scan job kind: {kind}')
@@ -2749,6 +2790,9 @@ def build_solution_result_base(solution: dict[str, Any]) -> dict[str, Any]:
         'large_file_error': '',
         'index_items': [],
         'index_error': '',
+        'service_status': 'Chưa quét',
+        'expiration_date': '',
+        'expiration_status': 'Chưa quét',
         'note': '',
         'error': '',
     }
@@ -3143,13 +3187,220 @@ def _storage_percent_over_threshold(value: Any, threshold: float = 80.0) -> bool
 
 
 
+def parse_solution_service_pipe_lines(stdout_text: str) -> list[dict[str, str]]:
+    services: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw_line in str(stdout_text or '').splitlines():
+        line = str(raw_line or '').strip()
+        if not line or '|' not in line:
+            continue
+        name, status = [part.strip() for part in line.split('|', 1)]
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        services.append({'name': name, 'status': extract_service_status_text(status or 'Unknown')})
+    return services
+
+
+def fetch_solution_services_and_license_via_ssh(solution: dict[str, Any]) -> dict[str, Any]:
+    host = parse_solution_host(solution.get('endpoint', ''))
+    ssh_username = str(solution.get('ssh_username', '')).strip()
+    ssh_password = str(solution.get('ssh_password', '')).strip()
+    username = str(solution.get('username', '')).strip()
+    password = str(solution.get('password', '')).strip()
+    if not host or not ssh_username or not ssh_password:
+        return {'services': [], 'service_ok': False, 'service_status': 'Không lấy được service từ giao diện nội bộ', 'service_note': 'Thiếu endpoint hoặc SSH credentials', 'expiration_date': '', 'expiration_note': ''}
+    if not username or not password:
+        return {'services': [], 'service_ok': False, 'service_status': 'Không lấy được service từ giao diện nội bộ', 'service_note': 'Thiếu tài khoản giải pháp', 'expiration_date': '', 'expiration_note': ''}
+
+    settings = get_timeout_settings('solution')
+    connect_timeout = float(settings.get('ssh_connect_timeout', 5))
+    command_timeout = max(25.0, float(settings.get('ssh_command_timeout', 10)) + 25.0)
+    cookie_path = f"/tmp/v2_{uuid.uuid4().hex}.cookie"
+    login_post_data = f'user_name={username}&password={password}&btnSubmit=Login'
+
+    shell_lines = [
+        'set +e',
+        f'COOKIE_PATH={shlex.quote(cookie_path)}',
+        f'LOGIN_DATA={shlex.quote(login_post_data)}',
+        'cleanup() { rm -f "$COOKIE_PATH"; }',
+        'trap cleanup EXIT',
+        'run_bundle() {',
+        '  base_url="$1"',
+        '  rm -f "$COOKIE_PATH"',
+        '  curl -sk -i -c "$COOKIE_PATH" -b "$COOKIE_PATH" -X POST "$base_url/default/public/login" -H "Content-Type: application/x-www-form-urlencoded" -d "$LOGIN_DATA" >/dev/null 2>&1 || true',
+        '''  service_output=$(curl -sk -b "$COOKIE_PATH" "$base_url/default/system/status" | tr '\n' ' ' | sed 's#<div class="engine-card#\\n<div class="engine-card#g' | grep 'engine-card' | grep -oE '<div class="engine-title">[^<]+|<div class="status-badge[^>]*>[[:space:]]*[^<]+' | sed -E 's#<div class="engine-title">##; s#<div class="status-badge[^>]*>##; s/^[[:space:]]+//; s/[[:space:]]+$//' | paste -d '|' - - || true)''',
+        '''  expiration_output=$(curl -sk -b "$COOKIE_PATH" "$base_url/default/license/index" | grep -A2 'EXPIRATION DATE' | grep 'value=' | sed -E 's/.*value="([^"]+)".*/\1/' | head -n1 || true)''',
+        '  echo "__ATTEMPT_BASE__=$base_url"',
+        '  echo "__SERVICE_BEGIN__"',
+        '  printf "%s\\n" "$service_output"',
+        '  echo "__SERVICE_END__"',
+        '  echo "__EXPIRATION_BEGIN__"',
+        '  printf "%s\\n" "$expiration_output"',
+        '  echo "__EXPIRATION_END__"',
+        '}',
+        'first_output=$(run_bundle "https://127.0.0.1")',
+        'printf "%s\\n" "$first_output"',
+        "first_service=$(printf '%s\\n' \"$first_output\" | awk 'BEGIN{flag=0} /__SERVICE_BEGIN__/{flag=1;next} /__SERVICE_END__/{flag=0} flag{print}' | sed '/^$/d')",
+        "first_expiration=$(printf '%s\\n' \"$first_output\" | awk 'BEGIN{flag=0} /__EXPIRATION_BEGIN__/{flag=1;next} /__EXPIRATION_END__/{flag=0} flag{print}' | sed '/^$/d' | head -n1)",
+        'if [ -z "$first_service" ] || [ -z "$first_expiration" ]; then',
+        '  second_output=$(run_bundle "https://127.0.0.1:4434")',
+        '  printf "%s\\n" "$second_output"',
+        'fi',
+    ]
+    command = '\n'.join(shell_lines)
+
+    def _score_attempt(item: dict[str, Any]) -> tuple[int, int, int]:
+        services = list(item.get('services') or [])
+        expiration_date = str(item.get('expiration_date') or '').strip()
+        base_url = str(item.get('base_url') or '').strip()
+        score = 0
+        if services:
+            score += 2
+        if expiration_date:
+            score += 2
+        if base_url.endswith(':4434'):
+            score += 1
+        return (score, len(services), 1 if expiration_date else 0)
+
+    try:
+        stdout_text, stderr_text, exit_code = ssh_exec_multiline(
+            host,
+            ssh_username,
+            ssh_password,
+            command,
+            connect_timeout=connect_timeout,
+            command_timeout=command_timeout,
+            get_pty=False,
+        )
+        if exit_code != 0 and not stdout_text.strip():
+            raise RuntimeError(stderr_text.strip() or 'Không lấy được service từ giao diện nội bộ')
+
+        attempts: list[dict[str, Any]] = []
+        chunks = stdout_text.split('__ATTEMPT_BASE__=')
+        for raw_chunk in chunks[1:]:
+            base_url, _, rest = raw_chunk.partition('\n')
+            service_chunk = rest.split('__SERVICE_BEGIN__', 1)[-1].split('__SERVICE_END__', 1)[0]
+            expiration_chunk = rest.split('__EXPIRATION_BEGIN__', 1)[-1].split('__EXPIRATION_END__', 1)[0]
+            services = parse_solution_service_pipe_lines(service_chunk)
+            expiration_date = ''
+            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', expiration_chunk)
+            if date_match:
+                expiration_date = date_match.group(1)
+            else:
+                for raw_line in expiration_chunk.splitlines():
+                    line = re.sub(r'[\x00-\x1f\x7f]+', '', raw_line).strip()
+                    if line:
+                        expiration_date = line
+                        break
+            attempts.append({'base_url': base_url.strip(), 'services': services, 'expiration_date': expiration_date})
+
+        if not attempts:
+            raise RuntimeError('Không đọc được kết quả service/license từ SSH')
+
+        chosen = max(attempts, key=_score_attempt)
+        services = list(chosen.get('services') or [])
+        expiration_date = str(chosen.get('expiration_date') or '').strip()
+        service_status = 'Đã lấy service từ giao diện nội bộ' if services else 'Không lấy được service từ giao diện nội bộ'
+
+        note_parts = []
+        chosen_base = str(chosen.get('base_url') or '').strip()
+        if chosen_base == 'https://127.0.0.1:4434':
+            note_parts.append('Đã dùng trọn bộ login/service/license backup qua cổng 4434')
+        stderr_clean = stderr_text.strip()
+        if stderr_clean:
+            note_parts.append(stderr_clean)
+        note_text = '; '.join(part for part in note_parts if part)
+
+        return {
+            'services': services,
+            'service_ok': bool(services),
+            'service_status': service_status,
+            'service_note': note_text,
+            'expiration_date': expiration_date,
+            'expiration_note': note_text,
+        }
+    except Exception as exc:
+        return {'services': [], 'service_ok': False, 'service_status': 'Không lấy được service từ giao diện nội bộ', 'service_note': str(exc), 'expiration_date': '', 'expiration_note': str(exc)}
+
+
+
+def fetch_solution_expiration_date_via_ssh(solution: dict[str, Any]) -> dict[str, Any]:
+    host = parse_solution_host(solution.get('endpoint', ''))
+    ssh_username = str(solution.get('ssh_username', '')).strip()
+    ssh_password = str(solution.get('ssh_password', '')).strip()
+    username = str(solution.get('username', '')).strip()
+    password = str(solution.get('password', '')).strip()
+    if not host or not ssh_username or not ssh_password or not username or not password:
+        return {'expiration_date': '', 'expiration_note': ''}
+
+    settings = get_timeout_settings('solution')
+    connect_timeout = float(settings.get('ssh_connect_timeout', 5))
+    command_timeout = max(20.0, float(settings.get('ssh_command_timeout', 10)) + 20.0)
+    cookie_path = f"/tmp/v2_{uuid.uuid4().hex}.cookie"
+    login_post_data = f'user_name={username}&password={password}&btnSubmit=Login'
+    command = '\n'.join([
+        'set +e',
+        f'COOKIE_PATH={shlex.quote(cookie_path)}',
+        f'LOGIN_DATA={shlex.quote(login_post_data)}',
+        'cleanup() { rm -f "$COOKIE_PATH"; }',
+        'trap cleanup EXIT',
+        'run_one() {',
+        '  base_url="$1"',
+        '  rm -f "$COOKIE_PATH"',
+        '  curl -sk -i -c "$COOKIE_PATH" -b "$COOKIE_PATH" -X POST "$base_url/default/public/login" -H "Content-Type: application/x-www-form-urlencoded" -d "$LOGIN_DATA" >/dev/null 2>&1 || true',
+        "  expiration_output=$(curl -sk -b \"$COOKIE_PATH\" \"$base_url/default/license/index\" | grep -A2 'EXPIRATION DATE' | grep 'value=' | sed -E 's/.*value=\"([^\"]+)\".*/\\1/' | head -n1 || true)",
+        '  printf "__EXPIRATION__=%s|%s\\n" "$base_url" "$expiration_output"',
+        '}',
+        'run_one "https://127.0.0.1"',
+        'run_one "https://127.0.0.1:4434"',
+    ])
+    try:
+        stdout_text, stderr_text, exit_code = ssh_exec_multiline(
+            host,
+            ssh_username,
+            ssh_password,
+            command,
+            connect_timeout=connect_timeout,
+            command_timeout=command_timeout,
+            get_pty=False,
+        )
+        candidates: list[tuple[str, str]] = []
+        for raw_line in stdout_text.splitlines():
+            line = str(raw_line or '').strip()
+            if not line.startswith('__EXPIRATION__='):
+                continue
+            payload = line.split('=', 1)[1]
+            base_url, _, value = payload.partition('|')
+            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', value)
+            if date_match:
+                candidates.append((base_url.strip(), date_match.group(1)))
+        if not candidates:
+            return {'expiration_date': '', 'expiration_note': (stderr_text or '').strip()}
+        preferred = None
+        for base_url, date_text in candidates:
+            if base_url.endswith(':4434'):
+                preferred = (base_url, date_text)
+                break
+        chosen_base, chosen_date = preferred or candidates[0]
+        note = 'Đã dùng luồng EXPIRATION DATE backup qua cổng 4434' if chosen_base.endswith(':4434') else ''
+        return {'expiration_date': chosen_date, 'expiration_note': note}
+    except Exception as exc:
+        return {'expiration_date': '', 'expiration_note': str(exc)}
+
 def _solution_metric_phase(index: int, solution: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str, Any]]:
     cleaned = resolve_solution_secrets(normalize_solution(solution))
     result = build_solution_result_base(cleaned)
     result['name'] = cleaned.get('name', '')
     result['endpoint'] = cleaned.get('endpoint', '')
-    result['status'] = '30%'
-    result['login_status'] = 'Đang chờ bước service / file lớn / đăng nhập'
+    result['status'] = 'Phase 1/6: Đang lấy metrics CPU/RAM/Storage'
+    result['login_status'] = 'Đang chờ phase 3 đăng nhập web'
+    result['service_status'] = 'Đang chờ phase 4 lấy service từ web'
+    result['expiration_date'] = ''
+    result['expiration_status'] = 'Đang chờ phase 6 lấy EXPIRATION DATE'
     snmp_metrics, snmp_note, snmp_source = fetch_solution_metrics_snmp(cleaned)
     if snmp_metrics:
         result.update(snmp_metrics)
@@ -3167,70 +3418,104 @@ def _solution_metric_phase(index: int, solution: dict[str, Any]) -> tuple[int, d
     log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 1 metrics xong', {'storage': result.get('storage_percent', 'N/A')})
     return index, result, cleaned
 
-def _solution_service_phase(result: dict[str, Any], cleaned: dict[str, Any]) -> dict[str, Any]:
-    result = dict(result)
-    services, service_ok, service_status, service_note = fetch_solution_services_via_ssh(cleaned)
-    apply_services_to_solution_result(result, services, True)
-    result['service_status'] = service_status or ('Đã lấy service' if services else 'Không lấy được service')
-    result['note'] = '; '.join([x for x in [result.get('note', ''), service_note] if x])
-    if not services:
-        result['service_summary'] = 'Chưa lấy được service'
-    log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 2 service xong', {'service_summary': result.get('service_summary', '')})
-    return result
 
 def _solution_storage_phase(result: dict[str, Any], cleaned: dict[str, Any]) -> dict[str, Any]:
     result = dict(result)
+    result['status'] = 'Phase 2/6: Đang kiểm tra file lớn'
     if _storage_percent_over_threshold(result.get('storage_percent')):
         try:
             storage_data = fetch_solution_storage_details(cleaned)
             result['large_files'] = storage_data.get('items', [])
             result['large_file_threshold_gb'] = storage_data.get('threshold_gb', result.get('large_file_threshold_gb'))
             result['large_file_error'] = storage_data.get('raw_error', '')
-            log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 3 file lớn xong', {'files': str(len(result.get('large_files', [])))})
+            if result['large_files']:
+                result['status'] = 'Phase 2/6: Đã lấy danh sách file lớn'
+            else:
+                result['status'] = 'Phase 2/6: Storage cao nhưng chưa thấy file lớn vượt ngưỡng'
+            log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 2 file lớn xong', {'files': str(len(result.get('large_files', [])))})
         except Exception as exc:
             result['large_files'] = []
             result['large_file_error'] = str(exc)
+            result['status'] = 'Phase 2/6: Lỗi lấy file lớn'
             result['note'] = '; '.join([x for x in [result.get('note', ''), f'File lớn lỗi: {exc}'] if x])
-            log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', f'Phase 3 file lớn lỗi: {exc}')
+            log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', f'Phase 2 file lớn lỗi: {exc}')
+    else:
+        result['status'] = 'Phase 2/6: Storage bình thường, bỏ qua file lớn'
+        result['large_files'] = []
+        result['large_file_error'] = ''
+        log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 2 bỏ qua file lớn', {'storage': str(result.get('storage_percent', 'N/A'))})
     return result
+
 
 def _solution_login_phase(result: dict[str, Any], cleaned: dict[str, Any]) -> dict[str, Any]:
     result = dict(result)
-    login_ok, login_status, login_note = fetch_solution_login_via_web(cleaned)
-    result['status'] = '60%'
-    result['login_status'] = login_status or 'Đã kiểm tra đăng nhập'
-    result['is_success'] = login_ok
+    result['status'] = 'Phase 3/6 + 4/6: Đang đăng nhập web và lấy service'
+    login_future_result: dict[str, Any] = {}
+    service_future_result: dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        login_future = executor.submit(fetch_solution_login_via_web, cleaned)
+        service_future = executor.submit(fetch_solution_services_and_license_via_ssh, cleaned)
+        login_ok, login_status, login_note = login_future.result()
+        service_future_result = service_future.result()
+
+    result['login_status'] = login_status or 'Đã kiểm tra đăng nhập web'
+    result['is_success'] = bool(login_ok)
+    result['note'] = '; '.join([x for x in [result.get('note', ''), login_note, service_future_result.get('service_note', ''), service_future_result.get('expiration_note', '')] if x])
+    if login_ok:
+        result['login_status'] = 'Đăng nhập web thành công'
+    elif not result['login_status']:
+        result['login_status'] = 'Đăng nhập web thất bại'
+
+    services = service_future_result.get('services', [])
+    apply_services_to_solution_result(result, services, True)
+    result['service_status'] = service_future_result.get('service_status') or ('Đã lấy service từ giao diện nội bộ' if services else 'Không lấy được service từ giao diện nội bộ')
+    if not services:
+        result['service_summary'] = 'Chưa lấy được service từ giao diện nội bộ'
+
+    result['expiration_date'] = service_future_result.get('expiration_date', '')
+    if not re.search(r'(\d{4}-\d{2}-\d{2})', str(result.get('expiration_date') or '')):
+        fallback_expiration = fetch_solution_expiration_date_via_ssh(cleaned)
+        fallback_date = str(fallback_expiration.get('expiration_date') or '').strip()
+        if fallback_date:
+            result['expiration_date'] = fallback_date
+        result['note'] = '; '.join([x for x in [result.get('note', ''), fallback_expiration.get('expiration_note', '')] if x])
+    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', str(result.get('expiration_date') or ''))
+    result['expiration_date'] = date_match.group(1) if date_match else ''
+    result['expiration_status'] = 'Đã lấy EXPIRATION DATE' if result['expiration_date'] else 'Chưa lấy được EXPIRATION DATE'
     result['is_running'] = result.get('service_running_count', 0) > 0
     result['running_status'] = 'Đang chạy' if result['is_running'] else 'Không chạy'
-    result['note'] = '; '.join([x for x in [result.get('note', ''), login_note] if x])
+    result['status'] = 'Phase 4/6: Đã lấy service từ giao diện nội bộ'
     if not login_ok:
-        result['error'] = login_note or login_status
-    log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 4 login xong', {'login_status': result.get('login_status', ''), 'service_summary': result.get('service_summary', '')})
+        result['error'] = login_note or result['login_status']
+    log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 3 login + Phase 4 service xong', {'login_status': result.get('login_status', ''), 'service_summary': result.get('service_summary', ''), 'expiration_date': result.get('expiration_date', '')})
     return result
+
 
 def _solution_index_phase(result: dict[str, Any], cleaned: dict[str, Any]) -> dict[str, Any]:
     result = dict(result)
+    result['status'] = 'Phase 5/6: Đang lấy index'
     try:
         data = fetch_solution_index_details(cleaned)
         result['index_items'] = data.get('items', [])
         result['index_error'] = data.get('raw_error', '')
-        result['status'] = '100%'
+        result['status'] = 'Phase 6/6: Hoàn tất'
         log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', 'Phase 5 index xong', {'indices': str(len(result.get('index_items', [])))})
     except Exception as exc:
         result['index_items'] = []
         result['index_error'] = str(exc)
-        result['status'] = '100%'
+        result['status'] = 'Phase 6/6: Hoàn tất (lỗi index)'
         log_solution_metric_source(result.get('name', ''), result.get('metric_source', 'NONE') or 'NONE', f'Phase 5 index lỗi: {exc}')
     return result
 
+
 def _solution_finalize_after_metrics(result: dict[str, Any], cleaned: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    phase2_result = _solution_login_phase(_solution_storage_phase(_solution_service_phase(result, cleaned), cleaned), cleaned)
+    phase2_result = _solution_login_phase(_solution_storage_phase(result, cleaned), cleaned)
     final_result = _solution_index_phase(phase2_result, cleaned)
     return phase2_result, final_result
 
+
 def _check_one_solution_full(index: int, solution: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     index, result, cleaned = _solution_metric_phase(index, solution)
-    result = _solution_service_phase(result, cleaned)
     result = _solution_storage_phase(result, cleaned)
     result = _solution_login_phase(result, cleaned)
     result = _solution_index_phase(result, cleaned)
@@ -3241,7 +3526,7 @@ def check_one_solution(index: int, solution: dict[str, Any]) -> tuple[int, dict[
 
 
 def _run_solution_all_job(job_id: str, items: list[dict[str, Any]]) -> dict[str, Any]:
-    total_steps = len(items) * 3
+    total_steps = len(items) * 4
     worker_count = _solution_worker_count(len(items))
     with SCAN_JOB_LOCK:
         if job_id in SCAN_JOBS:
@@ -3265,8 +3550,8 @@ def _run_solution_all_job(job_id: str, items: list[dict[str, Any]]) -> dict[str,
     def run_one(idx: int, item: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         _idx, result, cleaned = _solution_metric_phase(idx, item)
         push_progress(idx, result, 1)
-        result = _solution_service_phase(result, cleaned)
         result = _solution_storage_phase(result, cleaned)
+        push_progress(idx, result, 1)
         result = _solution_login_phase(result, cleaned)
         push_progress(idx, result, 1)
         result = _solution_index_phase(result, cleaned)
@@ -3320,8 +3605,17 @@ def _run_scan_job(job_id: str, kind: str, payload: dict[str, Any]) -> None:
         elif kind == 'solution-one':
             index = int(payload['index'])
             item = _pick_item_by_index(load_solutions(), index, 'giải pháp')
-            _, one_result = check_one_solution(index, item)
-            _update_scan_job_progress(job_id, 0, one_result)
+            with SCAN_JOB_LOCK:
+                if job_id in SCAN_JOBS:
+                    SCAN_JOBS[job_id]['total_items'] = 4
+            _, phase_result, cleaned = _solution_metric_phase(index, item)
+            _update_scan_job_progress(job_id, 0, {**phase_result, 'has_scanned': True})
+            phase_result = _solution_storage_phase(phase_result, cleaned)
+            _update_scan_job_progress(job_id, 0, {**phase_result, 'has_scanned': True})
+            phase_result = _solution_login_phase(phase_result, cleaned)
+            _update_scan_job_progress(job_id, 0, {**phase_result, 'has_scanned': True})
+            one_result = _solution_index_phase(phase_result, cleaned)
+            _update_scan_job_progress(job_id, 0, {**one_result, 'has_scanned': True})
             result = {'index': index, 'result': one_result}
         else:
             raise ValueError(f'Unknown scan job kind: {kind}')
